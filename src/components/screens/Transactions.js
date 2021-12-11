@@ -1,42 +1,18 @@
 import React, {useContext, useEffect, useState} from 'react';
 import {makeStyles} from '@material-ui/core/styles';
-import {
-  Avatar,
-  Card,
-  CardContent,
-  CircularProgress,
-  Grid,
-} from '@material-ui/core';
-import {Alert} from '@material-ui/lab';
-import clsx from 'clsx';
-import moment from 'moment';
-import Decimal from 'decimal.js';
-import Web3 from 'web3';
-import _ from 'lodash';
+import {CircularProgress} from '@material-ui/core';
 
-import Copy from '../shared/Copy';
 import FilterTabs from '../shared/FilterTabs';
 import SearchBox from '../shared/SearchBox';
+import TransactionsList from '../shared/TransactionsList';
 
 import AppContext from '../../AppContext';
 
-import {
-  getInitials,
-  getPaymentContact,
-  getPaymentDueDisplay,
-  getPaymentsTotal, searchItems,
-  truncateAddress
-} from '../../helpers/utils';
 import {ERROR_MESSAGES} from '../../helpers/errors';
-import {cardStyles} from '../../helpers/style';
 import {
-  DIALOG_ACTIONS,
   TRANSACTION_DIRECTIONS,
   TRANSACTION_VIEWS
 } from '../../helpers/contants';
-
-import arrowLeft from '../../images/long-arrow-left.svg';
-import arrowRight from '../../images/long-arrow-right.svg';
 
 const useStyles = makeStyles((theme) => ({
   container: {
@@ -81,12 +57,11 @@ const useStyles = makeStyles((theme) => ({
 
 export default () => {
   const classes = useStyles();
-  const cardClasses = cardStyles();
-  const {contacts, transactions, openDialog, addresses, networks, payments, getNetworkById, getPayments, getTransactions} = useContext(AppContext);
+  const {screenTab, transactions, syncDataAndRefresh} = useContext(AppContext);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [currentFilter, setCurrentFilter] = useState(null);
+  const [currentFilter, setCurrentFilter] = useState(screenTab || null);
   const [search, setSearch] = useState('');
 
   useEffect(() => {
@@ -94,66 +69,38 @@ export default () => {
     setLoading(true);
     setError(null);
 
-    getPayments().then(payments => {
+    syncDataAndRefresh().then(() => {
       setLoading(false);
     }).catch(e => {
       setLoading(false);
       setError(ERROR_MESSAGES.READ_PAYMENTS_FAILED);
     });
-
-    getTransactions().catch(() => {});
   }, []);
 
-  const payableToDisplayValue = (value, chain) => {
-    if(value && chain) {
-      const network = chain && getNetworkById(chain) || null;
-      if(network) {
-        const decimals = network && network.nativeCurrency && network.nativeCurrency.decimals || null;
-        return new Decimal(value || 0).dividedBy(new Decimal(10).pow(decimals || 18).toNumber()).toFixed(4);
-      }
-    }
-    return 0;
-  };
+  const FILTERS = [
+    TRANSACTION_VIEWS.ALL,
+    // TRANSACTION_VIEWS.RECEIVED, TRANSACTION_VIEWS.SENT,
+    TRANSACTION_VIEWS.PROCESSING, TRANSACTION_VIEWS.COMPLETED
+  ];
 
-  const FILTERS = [TRANSACTION_VIEWS.ALL, TRANSACTION_VIEWS.RECEIVED, TRANSACTION_VIEWS.SENT];
-
-  let filteredTransactions = transactions.filter(i => {
-    if(currentFilter === TRANSACTION_VIEWS.RECEIVED) {
-      return i.direction === TRANSACTION_DIRECTIONS.IN;
+  let filteredTransactions = transactions.filter(transaction => {
+    const isPaid = transaction && (
+      typeof transaction.confirmed !== 'boolean' ||
+      (transaction.confirmed && !transaction.delegated) ||
+      (transaction.delegated && transaction.delegatedConfirmed)
+    );
+    if(currentFilter === TRANSACTION_VIEWS.PROCESSING) {
+      return !isPaid;
+    } if(currentFilter === TRANSACTION_VIEWS.COMPLETED) {
+      return isPaid;
+    } else if(currentFilter === TRANSACTION_VIEWS.RECEIVED) {
+      return transaction.direction === TRANSACTION_DIRECTIONS.IN;
     } else if(currentFilter === TRANSACTION_VIEWS.SENT) {
-      return i.direction !== TRANSACTION_DIRECTIONS.IN;
+      return transaction.direction !== TRANSACTION_DIRECTIONS.IN;
     } else {
       return true;
     }
-  }).map(transaction => {
-    return {
-      ...transaction,
-      ...(transaction.payment?{
-        payment: {
-          ...transaction.payment,
-          contact: getPaymentContact(transaction.payment, contacts),
-        }
-      }:{}),
-      ...(transaction.payments && Array.isArray(transaction.payments)?{
-        payments: (transaction.payments || []).map(payment => {
-          return {
-            ...payment,
-            contact: getPaymentContact(payment, contacts),
-          };
-        }),
-      }:{})
-    }
   });
-
-  const transactionResults = searchItems(
-    search, filteredTransactions, [
-      'from', 'sender', 'name', 'email', 'address',
-      'payment.name', 'payment.email', 'payment.address',
-      'payments.name', 'payments.email', 'payments.address',
-      'payment.contact.name', 'payment.contact.email', 'payment.contact.address',
-      'payments.contact.name', 'payments.contact.email', 'payments.contact.address',
-    ]
-  );
 
   return (
     <div className={classes.container}>
@@ -169,139 +116,7 @@ export default () => {
             <CircularProgress size={30}/>
           </div>
         ) || (
-          <>
-            {filteredTransactions && filteredTransactions.length && (
-              (transactionResults || []).map(transaction => {
-                if(transaction) {
-                  const displayValue = payableToDisplayValue(transaction.value, transaction.chain);
-                  let transactionPayments = [],
-                    paymentValues = [];
-
-                  if(transaction.payment) {
-                    transactionPayments.push(transaction.payment);
-                    paymentValues.push(transaction.value || 0);
-                  }
-
-                  if(transaction.payments && Array.isArray(transaction.payments)) {
-                    const transactionValues = transaction.values && Array.isArray(transaction.values) && transaction.values || [];
-                    for (const [idx, payment] of (transaction.payments || []).entries()) {
-                      transactionPayments.push(payment);
-                      paymentValues.push(transactionValues[idx] || 0);
-                    }
-                  }
-
-                  if(transactionPayments && transactionPayments.length) {
-                    return (
-                      <div className={classes.transaction}>
-                        <Grid container
-                              direction="row"
-                              justify="space-between"
-                              alignItems="center"
-                              className={classes.transactionHeader}>
-                          <div className={classes.light}>
-                            {transaction.paid_at && moment.utc(transaction.paid_at).format('DD.MMMM.YYYY') || null}
-                          </div>
-
-                          <div className={classes.transactionAmounts}>
-                            {displayValue && transaction.currency && (
-                              <span className={classes.light}>
-                              {displayValue}{' '}{transaction.currency}
-                            </span>
-                            ) || null}
-                            <span className={classes.bold}>
-                            ${getPaymentsTotal(transactionPayments)}
-                          </span>
-                          </div>
-                        </Grid>
-                        <div className={cardClasses.group}>
-                          {transactionPayments.map((payment, idx) => {
-                            const contact = payment.contact || getPaymentContact(payment, contacts),
-                              isPaid = transaction && (typeof transaction.confirmed !== 'boolean' || transaction.confirmed),
-                              isProcessing = transaction && (typeof transaction.confirmed === 'boolean' && !transaction.confirmed),
-                              paymentDisplayValue = payableToDisplayValue(paymentValues[idx], transaction.chain);
-
-                            let transactorName = null,
-                              transactorAddress = null;
-                            if(transaction.direction === TRANSACTION_DIRECTIONS.IN) {
-                              transactorName = transaction.sender;
-                              transactorAddress = transaction.from;
-                            } else {
-                              transactorName = (contact && contact.name) || (payment && payment.name);
-                              transactorAddress = (contact && contact.address) || (payment && payment.address);
-                            }
-
-                            return (
-                              <Card className={cardClasses.container}
-                                    onClick={e => {
-                                      openDialog(DIALOG_ACTIONS.SHOW_TRANSACTION_DETAILS, {
-                                        transaction: transaction,
-                                        payment: payment
-                                      });
-                                    }}>
-                                <CardContent className={cardClasses.content}>
-                                  <div className={cardClasses.avatarContainer}>
-                                    <Avatar className={cardClasses.avatar}>{getInitials(transactorName)}</Avatar>
-                                    <img src={transaction.direction === TRANSACTION_DIRECTIONS.IN?arrowRight:arrowLeft}
-                                         className={cardClasses.avatarExtraIcon}/>
-                                  </div>
-                                  <div className={cardClasses.detailsContainer}>
-                                    <Grid container
-                                          direction="row"
-                                          justify="space-between">
-                                      <div className={cardClasses.header}>
-                                        {transactorName}
-                                      </div>
-
-                                      <div className={cardClasses.header}>
-                                        ${payment.amount}
-                                      </div>
-                                    </Grid>
-                                    <Grid container
-                                          direction="row"
-                                          justify="space-between">
-                                      <Copy text={transactorAddress}>
-                                        <div className={cardClasses.subheader}>
-                                          {truncateAddress(transactorAddress)}
-                                        </div>
-                                      </Copy>
-
-                                      <div className={cardClasses.subheader} style={{whiteSpace: 'nowrap'}}>
-                                        {paymentDisplayValue && transaction.currency && (
-                                          <>
-                                            {paymentDisplayValue}{' '}{transaction.currency}
-                                          </>
-                                        ) || ' '}
-                                      </div>
-                                    </Grid>
-                                  </div>
-                                  <div className={cardClasses.actions}>
-                                    <div className={clsx(cardClasses.status, {
-                                      [cardClasses.statusPaid]: isPaid,
-                                      [cardClasses.statusInfo]: isProcessing,
-                                    })}>
-                                      {(isPaid && 'Paid') || (isProcessing && (
-                                        <>
-                                          <div>In</div>
-                                          <div>Progress</div>
-                                        </>
-                                      )) || getPaymentDueDisplay(payment)}
-                                    </div>
-                                  </div>
-                                </CardContent>
-                              </Card>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    );
-                  }
-                }
-                return null;
-              })
-            ) || (
-              <Alert severity={error && 'error' || 'info'}>{error || ERROR_MESSAGES.NO_TRANSACTIONS}</Alert>
-            )}
-          </>
+          <TransactionsList transactions={filteredTransactions} search={search} error={error}/>
         )}
       </div>
     </div>

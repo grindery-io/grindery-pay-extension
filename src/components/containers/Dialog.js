@@ -18,6 +18,8 @@ export const useStyles = makeStyles((theme) => ({
     width: `calc(100% - ${DIMENSIONS.dialogHorizontalMargin*2}px)`,
     maxWidth: `calc(${DIMENSIONS.width}px - ${DIMENSIONS.dialogHorizontalMargin*2}px)`,
     inset: `${theme.spacing(6.875)}px auto auto ${DIMENSIONS.dialogHorizontalMargin}px  !important`,
+    maxHeight: `calc(100vh - ${theme.spacing(6.875*1.2)}px)`,
+    overflowY: 'auto',
   },
   dialogTall: {
     //top: `${theme.spacing(11.25)}px !important`,

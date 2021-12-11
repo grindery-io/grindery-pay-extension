@@ -6,7 +6,9 @@ export const defaultAppState = {
   hidePaymentNotice: false,
   accessToken: null,
   screen: null,
+  screenTab: null,
   dialog: null,
+  metaQuery: null,
   addresses: [],
   walletAddresses: {},
   networks: null,
@@ -33,6 +35,7 @@ export default React.createContext({
   closeDialog: defaultFunction(),
   addNotification: defaultFunction(),
   updateHidePaymentNotice: defaultFunction(),
+  setMetaQuery: defaultFunction(),
 
   // Wallet
   getWalletInfo: defaultFunction(),
@@ -62,4 +65,7 @@ export default React.createContext({
   getIntegrations: defaultFunction(),
   addIntegration: defaultFunction(),
   removeIntegration: defaultFunction(),
+
+  // syncDataAndRefresh
+  syncDataAndRefresh: defaultFunction(),
 });

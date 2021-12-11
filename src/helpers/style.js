@@ -81,7 +81,7 @@ export const cardStyles = makeStyles((theme) => ({
     '&:last-child': {
       marginBottom: theme.spacing(0.5),
     },
-    '&:hover': {
+    '&:hover, &.highlight': {
       borderColor: theme.palette.secondary.main,
     },
     '&.selected': {

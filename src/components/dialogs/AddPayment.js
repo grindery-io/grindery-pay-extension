@@ -370,11 +370,20 @@ export default ({initialData, contact, nextDialog}) => {
                     color="primary"
                     variant="outlined"
                     disabled={saving}
+                    onClick={onClose}>
+              Cancel
+            </Button>
+            {/*
+            <Button type="submit"
+                    color="primary"
+                    variant="outlined"
+                    disabled={saving}
                     onClick={() => {
                       submitRef.current = 'pay_now';
                     }}>
               Pay Now
             </Button>
+            */}
             <Button type="submit"
                     color="primary"
                     variant="contained"

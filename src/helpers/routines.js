@@ -1,11 +1,17 @@
 /*global chrome*/
 import Web3 from 'web3';
 import _ from 'lodash';
+import moment from 'moment';
+import Decimal from 'decimal.js';
 
-import {INTEGRATIONS, MESSAGE_TYPES, SPREADSHEET_COLUMNS} from './contants';
+import {FIAT_CURRENCIES, INTEGRATIONS, MESSAGE_TYPES, MODELS, SPREADSHEET_COLUMNS} from './contants';
 import {
   deduplicateContacts,
-  columnToLetter
+  columnToLetter,
+  paymentParser,
+  paymentIdentifier,
+  convertCurrency,
+  deduplicatePayments
 } from './utils';
 import {readFromStorage, STORAGE_KEYS, writeToStorage} from './storage';
 import {getAuthToken, getSpreadsheetData, updateSpreadsheetData} from './google';
@@ -93,7 +99,29 @@ export const sendContentRequest = (action, payload=null) => {
   });
 };
 
+export const sendMetaRequest = (action, tabId, payload=null) => {
+  const data = {
+    type: MESSAGE_TYPES.ACTION,
+    action,
+    payload,
+  };
+  return new Promise((resolve, reject) => {
+    if(tabId) {
+      chrome.tabs.sendMessage(tabId, data, (res) => {
+        if(res && res.data) {
+          resolve(res && res.data || null);
+        } else {
+          reject(res && res.error || null);
+        }
+      });
+    } else {
+      reject(new Error('No tab specified'));
+    }
+  });
+};
+
 export const listenForExtensionNotification = (events, callback) => {
+  //return; // TODO: @david Remove this
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if(chrome.runtime.lastError) {
       return;
@@ -107,6 +135,7 @@ export const listenForExtensionNotification = (events, callback) => {
 };
 
 export const listenForExtensionEvent = (events, callback) => {
+  //return; // TODO: @david Remove this
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if(chrome.runtime.lastError) {
       //console.error('listenForExtensionEvent chrome.runtime.lastError => ', chrome.runtime.lastError.message || chrome.runtime.lastError);
@@ -120,31 +149,54 @@ export const listenForExtensionEvent = (events, callback) => {
   });
 };
 
-export const getContactsFromSheetData = (columnMap, spreadsheetData) => {
-  let contacts = [];
-  const spreadsheetColumns = spreadsheetData[0];
+export const parseFromGoogleSheet = (model, columnMap, data) => {
+  let items = [];
+  const spreadsheetColumns = data[0];
 
-  for (const item of (spreadsheetData || []).slice(1)) {
-    let contact = {};
+  let modelColumns = [],
+    modelValidator = item => Object.keys(item).length;
 
-    for (const key of [SPREADSHEET_COLUMNS.NAME, SPREADSHEET_COLUMNS.EMAIL, SPREADSHEET_COLUMNS.ADDRESS]) {
-      const spreadsheetColumnName = key && columnMap[key],
-        spreadsheetColumnIdx = spreadsheetColumns.indexOf(spreadsheetColumnName);
-      if (spreadsheetColumnIdx > -1) {
-        contact[key] = item[spreadsheetColumnIdx];
-      }
+  switch (model) {
+    case MODELS.CONTACTS: {
+      modelColumns = [
+        SPREADSHEET_COLUMNS.NAME, SPREADSHEET_COLUMNS.EMAIL, SPREADSHEET_COLUMNS.ADDRESS
+      ];
+      modelValidator = item => Object.keys(item).length && Web3.utils.isAddress(item.address);
+      break;
     }
-
-    if (Object.keys(contact).length && Web3.utils.isAddress(contact.address)) {
-      contacts.push(contact);
+    case MODELS.PAYMENT_REQUESTS: {
+      modelColumns = [
+        SPREADSHEET_COLUMNS.RECIPIENT, SPREADSHEET_COLUMNS.CURRENCY, SPREADSHEET_COLUMNS.AMOUNT,
+        SPREADSHEET_COLUMNS.DUE_DATE, SPREADSHEET_COLUMNS.DETAILS
+      ];
+      break;
+    }
+    default: {
+      break;
     }
   }
 
-  return contacts;
+  for (const item of (data || []).slice(1)) {
+    let parsedItem = {};
+
+    for (const key of modelColumns) {
+      const spreadsheetColumnName = key && columnMap[key],
+        spreadsheetColumnIdx = spreadsheetColumns.indexOf(spreadsheetColumnName);
+      if (spreadsheetColumnIdx > -1) {
+        parsedItem[key] = item[spreadsheetColumnIdx];
+      }
+    }
+
+    if (typeof modelValidator === 'function' && modelValidator(parsedItem)) {
+      items.push(parsedItem);
+    }
+  }
+
+  return items;
 };
 
-export const getSheetDataFromContacts = (sheetTitle, columnMap, columns, contacts) => {
-  let data = [],
+export const formatGoogleSheetInput = (model, sheetTitle, columnMap, columns, data) => {
+  let input = [],
     keyMap = {};
 
   let cleanedColumns = [...(columns || [])];
@@ -155,13 +207,33 @@ export const getSheetDataFromContacts = (sheetTitle, columnMap, columns, contact
     }
   }
 
-  if(contacts && Array.isArray(contacts)) {
+  let modelColumns = [];
+  switch (model) {
+    case MODELS.CONTACTS: {
+      modelColumns = [
+        SPREADSHEET_COLUMNS.NAME, SPREADSHEET_COLUMNS.EMAIL, SPREADSHEET_COLUMNS.ADDRESS
+      ];
+      break;
+    }
+    case MODELS.PAYMENT_REQUESTS: {
+      modelColumns = [
+        SPREADSHEET_COLUMNS.RECIPIENT, SPREADSHEET_COLUMNS.CURRENCY, SPREADSHEET_COLUMNS.AMOUNT,
+        SPREADSHEET_COLUMNS.DUE_DATE, SPREADSHEET_COLUMNS.DETAILS
+      ];
+      break;
+    }
+    default: {
+      break;
+    }
+  }
+
+  if(data && Array.isArray(data)) {
     for (const key of Object.keys(columnMap)) {
       keyMap[columnMap[key]] = key;
     }
 
-    for (const [idx, contact] of (contacts || []).entries()) {
-      if(contact) {
+    for (const [idx, item] of (data || []).entries()) {
+      if(item) {
         let columnIndices = [],
           rowValues = [];
 
@@ -170,9 +242,9 @@ export const getSheetDataFromContacts = (sheetTitle, columnMap, columns, contact
         for (const columnName of Object.keys(keyMap)) {
           const key = keyMap[columnName];
           const columnIdx = (cleanedColumns || []).indexOf(columnName);
-          if([SPREADSHEET_COLUMNS.NAME, SPREADSHEET_COLUMNS.EMAIL, SPREADSHEET_COLUMNS.ADDRESS].includes(key)) {
+          if(modelColumns.includes(key)) {
             columnIndices.push(columnIdx);
-            rowValues.push(cleanValue(contact, key));
+            rowValues.push(cleanValue(item, key));
           }
         }
 
@@ -198,7 +270,7 @@ export const getSheetDataFromContacts = (sheetTitle, columnMap, columns, contact
           }
 
           for (const group of groups) {
-            data.push({
+            input.push({
               range: `${sheetTitle}!${_.uniq([group.start, group.end]).map(i => `${columnToLetter(i+1)}${group.row+2}`).join(':')}`,
               values: [group.values],
             });
@@ -207,73 +279,154 @@ export const getSheetDataFromContacts = (sheetTitle, columnMap, columns, contact
       }
     }
   }
-  return data;
+  return input;
 };
 
-export const mergeContactsWithGoogleSheetsData = async () => {
-  return readFromStorage(STORAGE_KEYS.INTEGRATIONS).then(res => {
-    const integrations = res || {};
-    if(integrations && integrations[INTEGRATIONS.GOOGLE_SHEETS]) {
-      const spreadsheet = integrations[INTEGRATIONS.GOOGLE_SHEETS];
-      if(spreadsheet && spreadsheet.id && spreadsheet.sheet && spreadsheet.sheet.title && spreadsheet.columnMap) {
-        return getAuthToken().then(token => {
-          if(token) {
-            return getSpreadsheetData(token, spreadsheet.id, spreadsheet.sheet.title).then(data => {
-              if(data && Array.isArray(data)) {
-                const sheetContacts = getContactsFromSheetData(spreadsheet.columnMap, data);
-                return readFromStorage(STORAGE_KEYS.CONTACTS).then(res => {
-                  const localContacts = res && Array.isArray(res)?res:[];
-                  const contacts = deduplicateContacts([...localContacts, ...sheetContacts]);
-                  const sheetData = getSheetDataFromContacts(spreadsheet.sheet.title, spreadsheet.columnMap, data && data[0] || [], contacts);
-                  return {contacts, spreadsheet, data: sheetData};
-                }).catch(e => {
-                  throw new GrinderyError(e);
-                });
-              } else {
-                throw new GrinderyError(ERROR_MESSAGES.GOOGLE_SHEETS_READ_FAILED);
+export const mergeWithGoogleSheets = async () => {
+  const integrations = await readFromStorage(STORAGE_KEYS.INTEGRATIONS);
+  if(integrations && integrations[INTEGRATIONS.GOOGLE_SHEETS]) {
+    const spreadsheet = integrations[INTEGRATIONS.GOOGLE_SHEETS],
+      spreadsheetId = spreadsheet.id,
+      contactsSheetTitle = (spreadsheet.contacts && spreadsheet.contacts.sheet && spreadsheet.contacts.sheet.title) || (spreadsheet.sheet && spreadsheet.sheet.title),
+      contactsColumnMap = (spreadsheet.contacts && spreadsheet.contacts.columnMap) || spreadsheet.columnMap,
+      paymentsSheetTitle = spreadsheet.paymentRequests && spreadsheet.paymentRequests.sheet && spreadsheet.paymentRequests.sheet.title,
+      paymentsColumnMap = spreadsheet.paymentRequests && spreadsheet.paymentRequests.columnMap;
+
+    if(spreadsheetId && (
+      (contactsSheetTitle && contactsColumnMap) ||
+      (paymentsSheetTitle && paymentsColumnMap)
+    )) {
+      const token = await getAuthToken().catch(() => {});
+      if(token) {
+        let contacts = [],
+          payments = [];
+
+        // Merge contacts
+        const contactsData = await getSpreadsheetData(token, spreadsheetId, contactsSheetTitle).catch(() => {});
+        if(contactsData && Array.isArray(contactsData)) {
+          const sheetContacts = parseFromGoogleSheet(MODELS.CONTACTS, contactsColumnMap, contactsData);
+          const contactsRes = await readFromStorage(STORAGE_KEYS.CONTACTS).catch(() => {});
+          const localContacts = contactsRes && Array.isArray(contactsRes)?contactsRes:[];
+          contacts = deduplicateContacts([...localContacts, ...sheetContacts]);
+        }
+
+        // Merge payments
+        const paymentsData = await getSpreadsheetData(token, spreadsheetId, paymentsSheetTitle).catch(() => {});
+        if(paymentsData && Array.isArray(paymentsData)) {
+          const sheetPayments = parseFromGoogleSheet(MODELS.PAYMENT_REQUESTS, paymentsColumnMap, paymentsData);
+          const paymentsRes = await readFromStorage(STORAGE_KEYS.PAYMENTS).catch(() => {});
+          const localPayments = paymentsRes && Array.isArray(paymentsRes)?paymentsRes:[];
+
+          payments = [...localPayments];
+          const existingPaymentIds = payments.map(i => paymentIdentifier(i, true));
+          for (const item of sheetPayments.filter(i => !existingPaymentIds.includes(paymentIdentifier(i, true)))) {
+            const payment = paymentParser(item);
+            if(payment && payment.address && payment.currency && payment.amount) {
+              const isUSD = payment.currency === FIAT_CURRENCIES.USD;
+              let fiatAmount = 0;
+              if(!isUSD) {
+                fiatAmount = await convertCurrency(payment.amount, payment.currency, FIAT_CURRENCIES.USD, 2);
               }
-            }).catch(() => {
-              throw new GrinderyError(ERROR_MESSAGES.GOOGLE_SHEETS_READ_FAILED);
-            });
-          } else {
-            throw new GrinderyError(ERROR_MESSAGES.GOOGLE_CONNECT_FAILED);
+              payments.push({
+                address: payment.address,
+                inputCurrency: payment.currency,
+                ...(isUSD?{
+                  amount: new Decimal(payment.amount).toFixed(2),
+                }:{
+                  value: new Decimal(payment.amount).toFixed(4),
+                  amount: fiatAmount,
+                }),
+                ...(payment.due_date?{
+                  due_date: moment.utc(`${payment.due_date} ${payment.due_time}`, 'YYYY-MM-DD HH:mm:ss').format()
+                }:{}),
+                details: payment.details || '',
+              });
+            }
           }
-        }).catch(() => {
-          throw new GrinderyError(ERROR_MESSAGES.GOOGLE_CONNECT_FAILED);
-        });
+
+          payments = deduplicatePayments(payments);
+        }
+
+        if((contacts && contacts.length) || (payments && payments.length)) {
+          return {
+            spreadsheet,
+            token,
+            ...((contacts && contacts.length && contactsSheetTitle && contactsColumnMap)?{
+              contacts: {
+                data: contacts,
+                input: formatGoogleSheetInput(
+                  MODELS.CONTACTS, contactsSheetTitle, contactsColumnMap,
+                  contactsData && contactsData[0] || [], contacts
+                )
+              }
+            }:{}),
+            ...((payments && payments.length && contactsSheetTitle && contactsColumnMap)?{
+              payments: {
+                data: payments,
+                input: formatGoogleSheetInput(
+                  MODELS.PAYMENT_REQUESTS, paymentsSheetTitle, paymentsColumnMap,
+                  paymentsData && paymentsData[0] || [], payments.map(i => {
+                    const payment = paymentParser(i);
+                    return {
+                      ...payment,
+                      recipient: payment.address,
+                      due_date: moment.utc(payment.due_date).format('DD/MMM/YYYY'),
+                    };
+                  })
+                )
+              }
+            }:{}),
+          };
+        }
+
+        throw new GrinderyError(ERROR_MESSAGES.GOOGLE_SHEETS_READ_FAILED);
       } else {
-        throw new GrinderyError(ERROR_MESSAGES.GOOGLE_SHEETS_NO_INTEGRATION);
+        throw new GrinderyError(ERROR_MESSAGES.GOOGLE_CONNECT_FAILED);
       }
+
     } else {
       throw new GrinderyError(ERROR_MESSAGES.GOOGLE_SHEETS_NO_INTEGRATION);
     }
-  }).catch(e => {
-    throw new GrinderyError(e);
-  });
+  } else {
+    throw new GrinderyError(ERROR_MESSAGES.GOOGLE_SHEETS_NO_INTEGRATION);
+  }
+
 };
 
-export const syncContactsWithGoogleSheets = async () => {
-  return mergeContactsWithGoogleSheetsData().then(res => {
-    const {contacts, spreadsheet, data} = res || {};
-    if(contacts && Array.isArray(contacts)) {
-      return writeToStorage(STORAGE_KEYS.CONTACTS, contacts).then(() => {
-        if(spreadsheet && spreadsheet.id && data && Array.isArray(data) && data.length) {
-          getAuthToken().then(token => {
-            if(token) {
-              updateSpreadsheetData(token, spreadsheet.id, {
-                valueInputOption: 'USER_ENTERED',
-                data,
-              }).catch(() => {});
+export const syncWithGoogleSheets = async () => {
+  return mergeWithGoogleSheets().then(res => {
+    const {spreadsheet, token, contacts, payments} = res || {};
+    let promiseArray = [];
+
+    for (const [storageKey, source] of [
+      [STORAGE_KEYS.CONTACTS, contacts],
+      [STORAGE_KEYS.PAYMENTS, payments],
+    ]) {
+      // Sync contacts and payment requests
+      const {data, input} = source || {};
+      if(data && Array.isArray(data)) {
+        promiseArray.push(
+          writeToStorage(storageKey, data).then(() => {
+            if(spreadsheet && spreadsheet.id && input && Array.isArray(input) && input.length) {
+              if(token) {
+                updateSpreadsheetData(token, spreadsheet.id, {
+                  valueInputOption: 'USER_ENTERED',
+                  data: input,
+                }).catch(() => {});
+              }
             }
-          });
-        }
-        return contacts;
-      }).catch(e => {
-        throw new GrinderyError(e, ERROR_MESSAGES.SAVE_FAILED);
-      });
-    } else {
-      throw new GrinderyError(ERROR_MESSAGES.GOOGLE_SHEETS_MERGE_FAILED);
+            return data;
+          }).catch(e => {
+            throw new GrinderyError(e, ERROR_MESSAGES.SAVE_FAILED);
+          })
+        );
+      }
     }
+
+    if(promiseArray.length) {
+      return Promise.all(promiseArray);
+    }
+    throw new GrinderyError(ERROR_MESSAGES.GOOGLE_SHEETS_MERGE_FAILED);
   }).catch(e => {
     throw new GrinderyError(e)
   });

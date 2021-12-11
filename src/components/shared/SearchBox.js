@@ -40,9 +40,15 @@ const useStyles = makeStyles((theme) => ({
   },
 }));
 
-export default ({placeholder, onSearch, className, style}) => {
+export default ({value, placeholder, onSearch, className, style}) => {
   const classes = useStyles();
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(value || '');
+
+  useEffect(() => {
+    if(value && value !== search) {
+      setSearch(value);
+    }
+  }, [value]);
 
   useEffect(() => {
     if(onSearch) {

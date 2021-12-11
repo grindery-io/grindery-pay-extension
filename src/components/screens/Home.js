@@ -1,19 +1,21 @@
-import React, {useContext, useEffect, useState} from 'react';
+import React, {useContext, useEffect} from 'react';
 import {makeStyles} from '@material-ui/core/styles';
-import {Button, Card, CardContent, Grid, IconButton, MenuItem, Select, Typography} from '@material-ui/core';
-import {Add as AddIcon} from '@material-ui/icons';
+import {Button, Card, CardContent, Grid, IconButton, Typography} from '@material-ui/core';
+import {Add as AddIcon, ArrowForward as ArrowForwardIcon} from '@material-ui/icons';
 
 import AppContext from '../../AppContext';
 
-import {DIALOG_ACTIONS, FIAT_CURRENCIES, SCREENS, TASKS} from '../../helpers/contants';
-import {getPendingPayments, getPaymentsTotal} from '../../helpers/utils';
+import useSmartWalletBalance from '../../hooks/useSmartWalletBalance';
+
+import {DIALOG_ACTIONS, FIAT_CURRENCIES, PAYMENT_VIEWS, SCREENS} from '../../helpers/contants';
+import {getPendingPayments, getPaymentsTotal, getInProgressPayments} from '../../helpers/utils';
 
 import contactsIcon from '../../images/contacts.svg';
 import paymentsIcon from '../../images/payments-purple.svg';
 import walletIcon from '../../images/wallet-purple.svg';
 import fundIcon from '../../images/fund-purple.svg';
 import withdrawIcon from '../../images/withdraw-purple.svg';
-import useSmartWalletBalance from "../../hooks/useSmartWalletBalance";
+
 
 const useStyles = makeStyles((theme) => ({
   container: {
@@ -113,9 +115,13 @@ export default () => {
   const {currency, walletAddresses, networks, contacts, payments, transactions, changeScreen,getSmartWalletInfo, convertToCrypto, convertPayableToDisplayValue, convertToFiat, updateFiatCurrency, getTransactions} = useContext(AppContext);
 
   const networkId = networks && networks[0] || null,
-    walletAddress = networkId && walletAddresses && walletAddresses[networkId] || null,
-    pendingPayments = getPendingPayments(payments, transactions),
-    fiatTotal = getPaymentsTotal(pendingPayments);
+    walletAddress = networkId && walletAddresses && walletAddresses[networkId] || null;
+
+  const pendingPayments = getPendingPayments(payments, transactions),
+    pendingFiatTotal = getPaymentsTotal(pendingPayments);
+
+  const inProgressPayments = getInProgressPayments(payments, transactions),
+    inProgressFiatTotal = getPaymentsTotal(inProgressPayments);
 
   const balance = useSmartWalletBalance(walletAddress, networkId, currency);
 
@@ -140,24 +146,6 @@ export default () => {
 
   return (
     <div className={classes.container}>
-      {/*
-      <div className={classes.fiatSelectContainer}>
-        <Select
-          labelId="fiat-currency"
-          id="fiat-currency"
-          value={fiatCurrency}
-          onChange={e => updateFiatCurrency(e.target.value)}
-          className={classes.fiatSelect}>
-          {Object.keys(FIAT_CURRENCIES).map(key => {
-            const code = FIAT_CURRENCIES[key];
-            return (
-              <MenuItem value={code}>{code}</MenuItem>
-            );
-          })}
-        </Select>
-      </div>
-      */}
-
       <Card className={classes.card}>
         <CardContent className={classes.cardContent}>
           <Typography gutterBottom variant="h6" component="h3" className={classes.cardTitle}>
@@ -182,7 +170,7 @@ export default () => {
             <img src={paymentsIcon} className={classes.cardTitleIcon}/> Pending payments
           </Typography>
           <Typography gutterBottom variant="h2" component="h2" className={classes.cardAmount}>
-            {renderAmount(fiatTotal)}
+            {renderAmount(pendingFiatTotal)}
           </Typography>
 
           <IconButton color="secondary"
@@ -193,6 +181,24 @@ export default () => {
         </CardContent>
       </Card>
 
+      <Card className={classes.card}>
+        <CardContent className={classes.cardContent}>
+          <Typography gutterBottom variant="h6" component="h3" className={classes.cardTitle}>
+            <img src={paymentsIcon} className={classes.cardTitleIcon}/> Batch payments in progress
+          </Typography>
+          <Typography gutterBottom variant="h2" component="h2" className={classes.cardAmount}>
+            {renderAmount(inProgressFiatTotal)}
+          </Typography>
+
+          <IconButton color="secondary"
+                      className={classes.cardAction}
+                      onClick={() => changeScreen(SCREENS.PAYMENTS, null, null, PAYMENT_VIEWS.IN_PROGRESS)}>
+            <ArrowForwardIcon/>
+          </IconButton>
+        </CardContent>
+      </Card>
+
+      {/*
       <Card className={classes.card}>
         <CardContent className={classes.cardContent}>
           <Typography gutterBottom variant="h6" component="h3" className={classes.cardTitle}>
@@ -222,6 +228,7 @@ export default () => {
           </Grid>
         </CardContent>
       </Card>
+      */}
     </div>
   );
 };

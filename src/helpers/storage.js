@@ -1,6 +1,8 @@
 /*global chrome*/
 
-import _ from "lodash";
+import _ from 'lodash';
+import Web3 from 'web3';
+import {deduplicatePayments} from "./utils";
 
 export const STORAGE_KEYS = {
   LAST_ACTIVITY_AT: 'last_activity_at',
@@ -198,7 +200,13 @@ export const saveAddress = data => {
 };
 
 export const saveAddresses = data => {
-  return addItemsToArray(STORAGE_KEYS.ADDRESSES, data,items => _.uniq(items || []));
+  return addItemsToArray(
+    STORAGE_KEYS.ADDRESSES,
+    data,
+    items => _.uniq(
+      (items || []).filter(i => Web3.utils.isAddress(i)).map(i => Web3.utils.toChecksumAddress(i))
+    )
+  );
 };
 
 /* Networks */
@@ -236,6 +244,20 @@ export const saveWalletAddress = (chainId, address) => {
   return updateMap(STORAGE_KEYS.WALLET_ADDRESSES, {[chainId]: address});
 };
 
+
+/* Transactions */
+export const getPaymentRequests = () => {
+  return getArray(STORAGE_KEYS.PAYMENTS);
+};
+
+export const savePaymentRequest = data => {
+  return addItemToArray(STORAGE_KEYS.PAYMENTS, data, deduplicatePayments);
+};
+
+export const savePaymentRequests = data => {
+  return addItemsToArray(STORAGE_KEYS.PAYMENTS, data, deduplicatePayments);
+};
+
 /* Transactions */
 export const getTransactions = () => {
   return getArray(STORAGE_KEYS.TRANSACTIONS);
@@ -247,4 +269,20 @@ export const saveTransaction = data => {
 
 export const saveTransactions = data => {
   return addItemsToArray(STORAGE_KEYS.TRANSACTIONS, data, items => _.uniqBy(items || [], 'hash'));
+};
+
+export const updateTransaction = (hash, updates) => {
+  return getTransactions().then(existingTransactions => {
+    const transaction = existingTransactions.find(i => i.hash === hash);
+    if(transaction) {
+      return saveTransactions({
+        ...transaction,
+        ...updates,
+      });
+    } else {
+      throw new Error('Transaction not found');
+    }
+  }).catch(e => {
+    throw e;
+  });
 };

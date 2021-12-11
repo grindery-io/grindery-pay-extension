@@ -90,7 +90,7 @@ export default () => {
 
   const close = () => {
     logOut();
-    sendContentRequest(ACTIONS.CLOSE, {}).catch(() => {});
+    sendContentRequest(ACTIONS.CLOSE).catch(() => {});
   };
 
   const onChangeNetwork = () => {

@@ -5,7 +5,7 @@ import clsx from 'clsx';
 
 import AppContext from '../../AppContext';
 
-import {SCREENS} from '../../helpers/contants';
+import {DISABLED_SCREENS, HIDDEN_SCREENS, SCREENS} from '../../helpers/contants';
 import {getScreenDetails} from '../../helpers/utils';
 
 const useStyles = makeStyles((theme) => ({
@@ -20,6 +20,9 @@ const useStyles = makeStyles((theme) => ({
   icon: {
     height: 24,
   },
+  iconBigger: {
+    transform: 'scale(1.5)',
+  }
 }));
 
 export default () => {
@@ -30,8 +33,8 @@ export default () => {
     SCREENS.HOME, SCREENS.CONTACTS,
     SCREENS.CONTRACTS, SCREENS.PAYMENTS,
     SCREENS.WALLET, SCREENS.FUND, SCREENS.WITHDRAW,
-    SCREENS.TRANSACTIONS, SCREENS.SETTINGS
-  ];
+    SCREENS.TRANSACTIONS, SCREENS.INSPECTOR, SCREENS.SETTINGS
+  ].filter(i => !HIDDEN_SCREENS.includes(i));
   const currentIdx = accessToken?Math.max(0, tabScreens.findIndex(i => i === screen) || 0):-1;
   return (
     <Paper square className={classes.container}>
@@ -39,7 +42,7 @@ export default () => {
             value={currentIdx}
             onChange={(event, idx) => {
               const newScreen = tabScreens[idx];
-              if(newScreen) {
+              if(newScreen && ![...HIDDEN_SCREENS, ...DISABLED_SCREENS].includes(newScreen)) {
                 changeScreen(newScreen);
               }
             }}
@@ -53,9 +56,14 @@ export default () => {
       >
         {tabScreens.map((screen, idx) => {
           const screenIcons = getScreenDetails(screen, 'icon');
-          const title = getScreenDetails(screen, 'tooltip') || getScreenDetails(screen, 'title'),
+          let title = getScreenDetails(screen, 'tooltip') || getScreenDetails(screen, 'title'),
             icon = screenIcons && screenIcons.main,
             iconLight = screenIcons && (screenIcons.light || screenIcons.main);
+
+          if(DISABLED_SCREENS.includes(screen)) {
+            icon = iconLight;
+            title = `${title} not available. Coming soon.`
+          }
 
           return (
             <Tab className={classes.tab}

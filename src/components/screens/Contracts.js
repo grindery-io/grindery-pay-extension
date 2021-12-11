@@ -1,11 +1,14 @@
-import React, {useState} from 'react';
+import React, {useContext, useState} from 'react';
 import {makeStyles} from '@material-ui/core/styles';
 import {Alert} from '@material-ui/lab';
 
 import FilterTabs from '../shared/FilterTabs';
 import SearchAndAdd from '../shared/SearchAndAdd';
 
+import AppContext from '../../AppContext';
+
 import {CONTRACT_VIEWS} from '../../helpers/contants';
+
 
 const useStyles = makeStyles((theme) => ({
   container: {
@@ -21,10 +24,11 @@ const useStyles = makeStyles((theme) => ({
 
 export default () => {
   const classes = useStyles();
+  const {screenTab} = useContext(AppContext);
 
   const FILTERS = [CONTRACT_VIEWS.ALL, CONTRACT_VIEWS.RECEIVED, CONTRACT_VIEWS.SENT];
 
-  const [currentFilter, setCurrentFilter] = useState(null);
+  const [currentFilter, setCurrentFilter] = useState(screenTab || null);
 
   return (
     <div className={classes.container}>

@@ -24,17 +24,29 @@ const useStyles = makeStyles((theme) => ({
   },
 }));
 
-export default ({items, onChange, className, style}) => {
+export default ({items, selectedItem, onChange, className, style}) => {
   const classes = useStyles();
   const [currentIdx, setFilter] = useState(0);
 
-  if(!items || !Array.isArray(items)) {
+  useEffect(() => {
+    const selectedItemIdx = selectedItem && (items || []).indexOf(selectedItem);
+    if(selectedItemIdx > -1 && selectedItemIdx !== currentIdx) {
+      setFilter(selectedItemIdx);
+    }
+  }, []);
+
+  if(!items || !Array.isArray(items) || !items.length) {
     return null;
   }
 
   useEffect(() => {
     if(onChange) {
-      onChange(currentIdx > -1?items[currentIdx]:null);
+      const cleanedIdx = typeof currentIdx === 'number' && currentIdx > -1 && currentIdx < items.length?currentIdx:0;
+      if(cleanedIdx === currentIdx) {
+        onChange(items[cleanedIdx]);
+      } else {
+        setFilter(cleanedIdx);
+      }
     }
   }, [currentIdx]);
 
@@ -45,7 +57,7 @@ export default ({items, onChange, className, style}) => {
             style={style}>
       <Tabs value={currentIdx}
             onChange={(event, idx) => {
-              setFilter(idx);
+              setFilter((typeof idx === 'number' && idx > -1 && idx < items.length)?idx:0);
             }}
             variant="fullWidth"
             indicatorColor="secondary"

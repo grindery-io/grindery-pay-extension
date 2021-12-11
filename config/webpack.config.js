@@ -197,6 +197,7 @@ module.exports = function (webpackEnv) {
           main: paths.appIndexJs,
           background: paths.appBackgroundJs,
           content: paths.contentJs,
+          meta: paths.metaJs,
         },
     output: {
       // The build folder.
@@ -206,12 +207,16 @@ module.exports = function (webpackEnv) {
       // There will be one main bundle, and one file per asynchronous chunk.
       // In development, it does not produce real files.
       filename: (pathData, assetInfo) => {
-        const isBackgroundScript = /(.-)*background$/i.test(pathData && pathData.chunk && pathData.chunk.name),
-          isContentScript = /(.-)*content$/i.test(pathData && pathData.chunk && pathData.chunk.name);
+        const chunkName = pathData && pathData.chunk && pathData.chunk.name;
+        const isBackgroundScript = /(.-)*background$/i.test(chunkName),
+          isContentScript = /(.-)*content$/i.test(chunkName),
+          isMetaScript = /(.-)*meta$/i.test(chunkName);
         if(isBackgroundScript) {
           return 'background.js';
         } else if(isContentScript) {
           return 'content.js';
+        } else if(isMetaScript) {
+          return 'meta.js';
         }
         //return 'static/js/main.js';
         return 'static/js/' + (isEnvProduction
@@ -436,6 +441,7 @@ module.exports = function (webpackEnv) {
                       },
                     },
                   ],
+                  "@babel/plugin-proposal-optional-chaining",
                   isEnvDevelopment &&
                     shouldUseReactRefresh &&
                     require.resolve('react-refresh/babel'),
@@ -580,7 +586,7 @@ module.exports = function (webpackEnv) {
           {
             inject: true,
             template: paths.appHtml,
-            excludeChunks: ['background', 'content'/*, 'main'*/],
+            excludeChunks: ['background', 'content', 'meta'/*, 'main'*/],
           },
           isEnvProduction
             ? {

@@ -5,10 +5,11 @@ import _ from 'lodash';
 import axios from 'axios';
 import bcrypt from 'bcryptjs';
 import SHA256 from 'crypto-js/sha256';
+import Web3 from 'web3';
 
 import cachedChains from './chains.json';
 
-import {INTEGRATION_DETAILS, PAYMENT_DUE_STATES, SCREEN_DETAILS} from './contants';
+import {FIAT_CURRENCIES, INTEGRATION_DETAILS, PAYMENT_DUE_STATES, SCREEN_DETAILS} from './contants';
 
 export const generateVersionedHash = (value, legacy=false) => {
   if(legacy) {
@@ -115,13 +116,57 @@ export const getIntegrationDetails = (id, key) => {
   return INTEGRATION_DETAILS[id] && INTEGRATION_DETAILS[id][key] || null;
 };
 
+export const deduplicateAddresses = addresses => {
+  return _.uniq(
+      (addresses && Array.isArray(addresses)?addresses:[])
+          .filter(address => Web3.utils.isAddress(address))
+          .map(address => Web3.utils.toChecksumAddress(address))
+  );
+};
+
 export const contactComparator = i => ['address', 'email'].map(key => i[key] || '').join('__');
 
 export const deduplicateContacts = contacts => {
   return _.uniqBy(contacts && Array.isArray(contacts)?contacts:[], contactComparator);
 };
 
-export const paymentComparator = i => ['address', 'email', 'amount', 'type', 'due_date'].map(key => i[key] || '').join('__');
+export const paymentParser = payment => {
+  const cleanedPayment = {
+    ...payment,
+  };
+  if(!cleanedPayment.address && cleanedPayment.recipient) {
+    cleanedPayment.address = cleanedPayment.recipient;
+  }
+  if(cleanedPayment.inputCurrency && !cleanedPayment.currency) {
+    cleanedPayment.currency = cleanedPayment.inputCurrency;
+  }
+  if(cleanedPayment.currency !== FIAT_CURRENCIES.USD && cleanedPayment.value) {
+    if(cleanedPayment.amount) {
+      cleanedPayment.fiatAmount = cleanedPayment.amount;
+    }
+    cleanedPayment.amount = cleanedPayment.value;
+  }
+  if(cleanedPayment.due_date) {
+    const dateObject = moment.utc(cleanedPayment.due_date);
+    if(dateObject.isValid()) {
+      cleanedPayment.due_date = dateObject.format('YYYY-MM-DD');
+      cleanedPayment.due_time = dateObject.format('HH:mm:ss');
+    }
+  }
+  return cleanedPayment;
+};
+
+export const paymentIdentifier = (payment, ignoreTime=false) => {
+  const cleanedPayment = paymentParser(payment);
+  return [
+    'address', 'currency', 'amount', 'due_date',
+    ...(ignoreTime?[]:['due_time']),
+  ].map(key => cleanedPayment[key] || '').join('__');
+};
+
+export const paymentComparator = (payment, ignoreTime=false) => {
+  return paymentIdentifier(payment, false);
+};
 
 export const deduplicatePayments = payments => {
   return _.uniqBy(payments && Array.isArray(payments)?payments:[], paymentComparator);
@@ -152,6 +197,18 @@ export const getPendingPayments = (payments, transactions) => {
   return (payments || []).filter(payment => {
     const transaction = transactionFinder(transactions, payment) || null;
     return payment.amount && !transaction;
+  })
+};
+
+export const getInProgressPayments = (payments, transactions) => {
+  return (payments || []).filter(payment => {
+    const transaction = transactionFinder(transactions, payment) || null;
+    const isPaid = transaction && (
+        typeof transaction.confirmed !== 'boolean' ||
+        (transaction.confirmed && !transaction.delegated) ||
+        (transaction.delegated && transaction.delegatedConfirmed)
+    );
+    return payment.amount && transaction && !isPaid;
   })
 };
 
@@ -193,10 +250,12 @@ export const getNetworkExplorerUrl = id => {
   return network && network.explorers && Array.isArray(network.explorers) && network.explorers[0] && network.explorers[0].url || null;
 };
 
-export const getPriceData = async currencySymbol => {
+export const getPriceData = async (toCurrency, fromCurrency=FIAT_CURRENCIES.USD) => {
   // Rate only: https://min-api.cryptocompare.com/data/price?fsym=USD&tsyms=ETH
   // Full details: https://min-api.cryptocompare.com/data/pricemultifull?fsyms=USD&tsyms=ETH
-  return axios.get(`https://min-api.cryptocompare.com/data/price?fsym=USD&tsyms=${currencySymbol}`).then(res => {
+  return axios.get(
+    `https://min-api.cryptocompare.com/data/price?fsym=${fromCurrency || FIAT_CURRENCIES.USD}&tsyms=${toCurrency}`
+  ).then(res => {
     const data = res && res.data || null;
     if(data) {
       return data;
@@ -205,6 +264,19 @@ export const getPriceData = async currencySymbol => {
   }).catch(e => {
     throw e;
   });
+};
+
+export const convertCurrency = async (amount, from, to, decimals) => {
+  if(amount && from && to) {
+    const rateInfo = await getPriceData(to, from).catch(() => {});
+    const rate = rateInfo && rateInfo[to];
+    if(rate) {
+      return new Decimal(amount).times(
+        new Decimal(rate)
+      ).toFixed(decimals || 4);
+    }
+  }
+  throw new Error('Failed to covert');
 };
 
 export const searchItems = (query, items, fields, orderBy, sortDirection) => {

@@ -71,7 +71,13 @@ export default () => {
     getSmartWalletInfo();
   }, [networkId]);
 
-  const createWallet = chainId => {
+  const createWallet = () => {
+    console.log('createWallet', {
+      account: address,
+      chain: networkId,
+      smartWallets: walletAddresses,
+      stableCoin: stableCoin && stableCoin.symbol || 'UST'
+    });
     setLoading(true);
     makeBackgroundRequest(TASKS.CREATE_WALLET, {
       account: address,

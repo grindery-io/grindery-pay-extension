@@ -3,7 +3,7 @@ import {Tooltip} from '@material-ui/core';
 import {CopyToClipboard} from 'react-copy-to-clipboard';
 
 
-export default ({text, children}) => {
+export default ({text, children, instruction}) => {
   const [copied, setCopied] = useState(false);
 
   const onCopied = () => {
@@ -16,7 +16,7 @@ export default ({text, children}) => {
   return (
     <CopyToClipboard text={text}
                      onCopy={onCopied}>
-      <Tooltip title={copied?'Copied!':'Click to copy'}
+      <Tooltip title={copied?'Copied!':(instruction || 'Click to copy')}
                placement="top">
         {children}
       </Tooltip>

@@ -10,6 +10,9 @@ export const createProvider = () => {
     console.error(`Metamask connect error `, e);
     provider = null;
   }
+  if(!provider && window.ethereum) {
+    provider = window.ethereum;
+  }
   return provider;
 };
 
@@ -21,7 +24,6 @@ export const createWeb3 = provider => {
 export const getAccounts = async web3 => {
   web3 = web3 || createWeb3();
   if(web3) {
-    //const selectedAddress = web3.currentProvider && web3.currentProvider.selectedAddress;
     return web3.eth.getAccounts().then(res => {
       return res;
     }).catch(e => {

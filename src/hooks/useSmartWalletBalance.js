@@ -57,7 +57,7 @@ export default (address, networkId, currency) => {
       const decimals = contracts && contracts.token && contracts.token[token] && contracts.token[token].decimals || 18;
       cryptoAmount = convertPayableToDisplayValue(amount, decimals);
 
-      getPriceData(token).then(data => {
+      getPriceData(token, FIAT_CURRENCIES.USD).then(data => {
         const rate = new Decimal(data && data[token] || 0).toNumber() || 0;
         updateBalanceState(token, cryptoAmount, convertToFiat(cryptoAmount, rate));
       }).catch(e => {

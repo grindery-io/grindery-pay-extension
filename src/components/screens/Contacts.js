@@ -70,7 +70,7 @@ const useStyles = makeStyles((theme) => ({
 export default () => {
   const classes = useStyles();
   const cardClasses = cardStyles();
-  const {currency, contacts, payments, changeScreen, openDialog, convertToCrypto, getContacts} = useContext(AppContext);
+  const {currency, contacts, payments, changeScreen, openDialog, convertToCrypto, syncDataAndRefresh} = useContext(AppContext);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -81,7 +81,7 @@ export default () => {
     setLoading(true);
     setError(null);
 
-    getContacts().then(contacts => {
+    syncDataAndRefresh().then(() => {
       setLoading(false);
     }).catch(e => {
       setLoading(false);

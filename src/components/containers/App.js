@@ -24,7 +24,7 @@ import {
   DEFAULT_STABLE_COINS,
   TASKS,
   WALLET_EVENTS,
-  NOTIFICATIONS
+  NOTIFICATIONS, META_EVENTS
 } from '../../helpers/contants';
 import {
   STORAGE_KEYS,
@@ -43,7 +43,7 @@ import {
 } from '../../helpers/storage';
 import {
   contactComparator,
-  decodeVersionedHash,
+  decodeVersionedHash, deduplicateAddresses,
   deduplicateContacts,
   deduplicatePayments,
   generateVersionedHash,
@@ -131,7 +131,10 @@ export default () => {
 
   // Navigation
   const [screen, setScreen] = useState(SCREENS.AUTH);
+  const [screenTab, setScreenTab] = useState(null);
   const [dialog, setDialog] = useState(null);
+  const [nextScreen, setNextScreen] = useState(SCREENS.HOME);
+  const [metaQuery, setMetaQuery] = useState(null);
 
   // Notifications
   const [notifications, setNotifications] = useState([]);
@@ -159,9 +162,10 @@ export default () => {
       // Restore snapshot
       getSnapshot().then(snapshot => {
         if(snapshot) {
-          const {screen, dialog, state} = snapshot;
+          const {screen, screenTab, dialog, state} = snapshot;
           if(screen) {
             setScreen(screen);
+            setScreenTab(screenTab || null);
           }
           if(dialog && dialog.action) {
             setDialog({
@@ -198,7 +202,7 @@ export default () => {
       if (hash) {
         readFromStorage(STORAGE_KEYS.LAST_ACTIVITY_AT).then(res => {
           const lastActivityAt = res && moment.utc(res).isValid() && moment.utc(res) || null;
-          const threshold = moment.utc().subtract(5, 'minutes');
+          const threshold = moment.utc().subtract(15, 'minutes'); // TODO: @david reset to 15 mins
           if (lastActivityAt && lastActivityAt > threshold) {
             restoreSession(true);
             setAccessToken(hash);
@@ -219,6 +223,18 @@ export default () => {
     getHidePrePaymentNotice().then(res => {
       setHidePaymentNotice(!!res);
     }).catch(() => {});
+
+    listenToMetaEvents();
+
+    /*
+    let dataRefresher = setInterval(() => {
+      syncDataAndRefresh().catch(() => {});
+    }, 15*1000);
+
+    return () => {
+      clearInterval(dataRefresher);
+    };
+    */
   }, []);
 
   // Initialize app state
@@ -243,9 +259,10 @@ export default () => {
       getContacts().catch(() => {});
       getPayments().catch(() => {});
       getTransactions().catch(() => {});
+
       getIntegrations().catch(() => {});
 
-      syncDataAndRefresh();
+      syncDataAndRefresh().catch(() => {});
 
       makeBackgroundRequest(TASKS.CLEAN_TRANSACTIONS).then(items => {
         if(items && Array.isArray(items) && items.length) {
@@ -255,14 +272,19 @@ export default () => {
     }
   }, [accessToken]);
 
-  // Auto select right screen after login or logout
+  // Auto select/redirect to right screen after login or logout
   useEffect(() => {
     if (!accessToken && screen !== SCREENS.AUTH) {
       // Switch to Auth
+      if(screen) {
+        setNextScreen(screen);
+      }
       setScreen(SCREENS.AUTH);
+      setScreenTab(null);
     } else if (accessToken && screen === SCREENS.AUTH) {
       // Switch to Home
-      setScreen(SCREENS.HOME);
+      setScreen(nextScreen || SCREENS.HOME);
+      setScreenTab(null);
     }
   }, [screen, accessToken]);
 
@@ -311,7 +333,7 @@ export default () => {
       const setAlternativeSymbol = () => {
         // Some testnets use made up symbols
         if (chainSymbol) {
-          getPriceData(chainSymbol).then(data => {
+          getPriceData(chainSymbol, FIAT_CURRENCIES.USD).then(data => {
             if (data && data[chainSymbol]) {
               const exchangeRate = new Decimal(data && data[chainSymbol] || 0).toNumber() || 0;
               updateCurrencyInfo(chainSymbol, exchangeRate);
@@ -326,7 +348,7 @@ export default () => {
         }
       };
 
-      getPriceData(currencySymbol).then(data => {
+      getPriceData(currencySymbol, FIAT_CURRENCIES.USD).then(data => {
         if (data && data[currencySymbol]) {
           const exchangeRate = new Decimal(data && data[currencySymbol] || 0).toNumber() || 0;
           updateCurrencyInfo(currencySymbol, exchangeRate);
@@ -340,10 +362,14 @@ export default () => {
   };
 
   const syncDataAndRefresh = () => {
-    makeBackgroundRequest(TASKS.SYNC_GOOGLE_SHEETS).then(() => {
-      // Refresh contacts
-      getContacts().catch(() => {});
-    }).catch(() => {});
+    const address = addresses && addresses[0] || '';
+    return makeBackgroundRequest(TASKS.SYNC_EXTERNAL_DATA, {address}).then(() => {
+      return Promise.all([
+        getContacts(),
+        getPayments(),
+        getTransactions(),
+      ])
+    });
   };
 
   const authenticate = passcode => {
@@ -390,14 +416,14 @@ export default () => {
       return makeBackgroundRequest(TASKS.GET_ACCOUNTS).then(res => {
         const items = res && Array.isArray(res) ? res : [];
         if (items.length) {
-          const allAddresses = _.uniq([...(items || []), ...(localAddresses || [])]);
+          const allAddresses = deduplicateAddresses([...(items || []), ...(localAddresses || [])]);
           setAddresses(allAddresses);
           refreshNetwork(localNetworks);
           return allAddresses;
         } else {
           return makeBackgroundRequest(TASKS.REQUEST_ACCOUNTS).then(res => {
             const items = res && Array.isArray(res) ? res : [];
-            const allAddresses = _.uniq([...(items || []), ...(localAddresses || [])]);
+            const allAddresses = deduplicateAddresses([...(items || []), ...(localAddresses || [])]);
             setAddresses(allAddresses);
             if (items.length) {
               refreshNetwork(localNetworks);
@@ -413,7 +439,7 @@ export default () => {
     };
 
     return getAddresses().then(res => {
-      const localAddresses = _.uniq(res && Array.isArray(res) ? res : []);
+      const localAddresses = deduplicateAddresses(res && Array.isArray(res) ? res : []);
       if (localAddresses.length) {
         setAddresses(localAddresses);
       }
@@ -452,9 +478,9 @@ export default () => {
         case WALLET_EVENTS.ACCOUNTS_CHANGED: {
           const accounts = payload && payload.data;
           if(accounts && Array.isArray(accounts) && accounts.length) {
-            const allAddresses = _.uniq([...(accounts || []), ...(addresses || [])]);
+            const allAddresses = deduplicateAddresses([...(accounts || []), ...(addresses || [])]);
             setAddresses(allAddresses);
-            saveAddresses(accounts).then(res => {
+            saveAddresses(allAddresses).then(res => {
               if(res && Array.isArray(res) && res.length) {
                 setAddresses(res);
               }
@@ -479,6 +505,27 @@ export default () => {
         case WALLET_EVENTS.CONNECT:
         case WALLET_EVENTS.DISCONNECT: {
           getWalletInfo();
+          break;
+        }
+        default: {
+          break;
+        }
+      }
+    });
+  };
+
+  const listenToMetaEvents = () => {
+    listenForExtensionEvent([
+      META_EVENTS.QUERY,
+    ], (event, payload) => {
+      switch (event) {
+        case META_EVENTS.QUERY: {
+          const {query} = payload || {};
+          if(query) {
+            // Navigate to inspector
+            setMetaQuery(query);
+            setScreen(SCREENS.INSPECTOR);
+          }
           break;
         }
         default: {
@@ -641,7 +688,7 @@ export default () => {
     return writeToStorage(STORAGE_KEYS.CONTACTS, newItems).then(res => {
       setContacts(newItems);
 
-      syncDataAndRefresh();
+      syncDataAndRefresh().catch(() => {});
 
       return null;
     }).catch(e => {
@@ -672,7 +719,7 @@ export default () => {
     return writeToStorage(STORAGE_KEYS.PAYMENTS, newItems).then(res => {
       setPayments(newItems);
 
-      syncDataAndRefresh();
+      syncDataAndRefresh().catch(() => {});
 
       return null;
     }).catch(e => {
@@ -723,11 +770,15 @@ export default () => {
       hidePaymentNotice,
       accessToken,
       screen,
+      screenTab,
       dialog,
+      metaQuery,
+
       addresses,
       walletAddresses,
       networks,
       currency,
+      rate,
 
       fiatCurrency,
       stableCoin,
@@ -743,8 +794,9 @@ export default () => {
         setAccessToken(null);
         writeToStorage(STORAGE_KEYS.LAST_ACTIVITY_AT, '').catch(() => {});
       },
-      changeScreen: (screen, action = null, data = null) => {
+      changeScreen: (screen, action = null, data = null, screenTab=null) => {
         setScreen(screen);
+        setScreenTab(screenTab || null);
         if (action) {
           setDialog({action, data});
         }
@@ -770,6 +822,7 @@ export default () => {
         setHidePaymentNotice(true);
         setHidePrePaymentNotice().catch(() => {});
       },
+      setMetaQuery,
 
       // Wallet
       getWalletInfo,
@@ -795,6 +848,8 @@ export default () => {
       getIntegrations,
       addIntegration,
       removeIntegration,
+
+      syncDataAndRefresh,
     }}>
       <div className={classes.container}>
         <ErrorBoundary>
@@ -821,7 +876,8 @@ export default () => {
 
               <div className={clsx(classes.mainContent, {
                 [classes.mainContentNoPadding]: [
-                  SCREENS.CONTRACTS, SCREENS.PAYMENTS, SCREENS.TRANSACTIONS, SCREENS.FUND, SCREENS.WITHDRAW
+                  SCREENS.CONTRACTS, SCREENS.PAYMENTS, SCREENS.TRANSACTIONS,
+                  SCREENS.FUND, SCREENS.WITHDRAW, SCREENS.INSPECTOR
                 ].includes(screen),
               })}>
                 <ErrorBoundary>

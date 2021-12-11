@@ -1,3 +1,5 @@
+import Web3 from 'web3';
+
 import homeIcon from '../images/home.svg';
 import homeIconLight from '../images/home-light.svg';
 import contactsIcon from '../images/contacts.svg';
@@ -16,6 +18,8 @@ import withdrawIcon from '../images/withdraw.svg';
 import withdrawLightIcon from '../images/withdraw-light.svg';
 import settingsIcon from '../images/settings.svg';
 import settingsLightIcon from '../images/settings-light.svg';
+import inspectorIcon from '../images/inspector.svg';
+import inspectorLightIcon from '../images/inspector-light.svg';
 
 import gustoLogo from '../images/gusto.svg';
 import googleSheetsLogo from '../images/google-sheets.svg';
@@ -33,7 +37,8 @@ import DAIIcon from '../images/DAI.svg';
 export const ADDRESS_ZERO = '0x0000000000000000000000000000000000000000';
 export const ADDRESS_EXAMPLE = '0xab5801a7d398351b8be11c439e05c5b3259aec9a';
 
-export const EXTENSION_SELECTOR = 'grindery-payroll-extension-root';
+export const EXTENSION_SELECTOR_NAME = 'grindery-payroll-extension-root';
+export const EXTENSION_META_BUTTON_SELECTOR_NAME = 'grindery-pay-extension-meta-button';
 
 export const MESSAGE_TYPES = {
   TASK: 'task',
@@ -50,10 +55,12 @@ export const TASKS = {
   GET_BALANCE: 'get_balance',
   MAKE_PAYOUT: 'make_payout',
   CLEAN_TRANSACTIONS: 'clean_transactions',
-  SYNC_GOOGLE_SHEETS: 'sync_google_sheets',
+  SYNC_EXTERNAL_DATA: 'sync_external_data',
   CREATE_WALLET: 'create_wallet',
   CHANGE_NETWORK: 'change_network',
   GET_TOKEN_BALANCE: 'get_token_balance',
+  OPEN_META_POPUP: 'open_meta_popup',
+  RELAY_META_EVENT: 'relay_meta_event',
 };
 
 export const NOTIFICATIONS = {
@@ -67,7 +74,13 @@ export const NOTIFICATIONS = {
 
 export const ACTIONS = {
   CLOSE: 'close',
-  GET_ACTIVE_GOOGLE_SHEET_DATA: 'get_active_google_sheet_data',
+  GET_ACTIVE_GOOGLE_SHEET_INFO: 'get_active_google_sheet_info',
+  GET_ACTIVE_ARAGON_DAO_INFO: 'get_active_aragon_dao_info',
+  GET_ACTIVE_GNOSIS_SAFE_INFO: 'get_active_gnosis_safe_info',
+
+  ADD_META: 'add_meta',
+  OPEN_META_POPUP: 'open_meta_popup',
+  TOGGLE_META_POPUP: 'toggle_meta_popup',
 };
 
 export const SCREENS = {
@@ -81,6 +94,7 @@ export const SCREENS = {
   FUND: 'fund',
   WITHDRAW: 'withdraw',
   SETTINGS: 'settings',
+  INSPECTOR: 'inspector',
 };
 
 export const SCREEN_DETAILS = {
@@ -120,14 +134,14 @@ export const SCREEN_DETAILS = {
     }
   },
   [SCREENS.WALLET]: {
-    title: 'Wallet',
+    title: 'Smart Wallet',
     icon: {
       main: walletIcon,
       light: walletLightIcon,
     }
   },
   [SCREENS.FUND]: {
-    title: 'Fund',
+    title: 'Funding',
     icon: {
       main: fundIcon,
       light: fundLightIcon,
@@ -148,7 +162,24 @@ export const SCREEN_DETAILS = {
       light: settingsLightIcon,
     }
   },
+  [SCREENS.INSPECTOR]: {
+    title: 'Inspector',
+    icon: {
+      main: inspectorIcon,
+      light: inspectorLightIcon,
+    }
+  },
 };
+
+export const HIDDEN_SCREENS = [
+  SCREENS.CONTRACTS
+];
+
+export const DISABLED_SCREENS = [
+  SCREENS.WALLET,
+  SCREENS.WITHDRAW,
+  SCREENS.FUND,
+];
 
 export const DIALOG_ACTIONS = {
   ADD_CONTACT: 'add_contact',
@@ -184,31 +215,48 @@ export const INTEGRATIONS = {
 };
 
 export const INTEGRATION_DETAILS = {
-  [INTEGRATIONS.GUSTO]: {
-    logo: gustoLogo,
-  },
   [INTEGRATIONS.GOOGLE_SHEETS]: {
     logo: googleSheetsLogo,
   },
   [INTEGRATIONS.CIRCLE]: {
     logo: circleLogo,
   },
+  [INTEGRATIONS.GUSTO]: {
+    logo: gustoLogo,
+  },
 };
+
+export const HIDDEN_INTEGRATIONS = [
+  INTEGRATIONS.CIRCLE,
+  INTEGRATIONS.GUSTO,
+];
+
+export const DISABLED_INTEGRATIONS = [
+
+];
 
 export const SPREADSHEET_COLUMNS = {
   NAME: 'name',
   EMAIL: 'email',
   ADDRESS: 'address',
+
+  RECIPIENT: 'recipient',
+  CURRENCY: 'currency',
   AMOUNT: 'amount',
   DUE_DATE: 'due_date',
+  DETAILS: 'details',
 };
 
 export const SPREADSHEET_COLUMNS_DISPLAY = {
   [SPREADSHEET_COLUMNS.NAME]: 'Name',
   [SPREADSHEET_COLUMNS.EMAIL]: 'Email',
   [SPREADSHEET_COLUMNS.ADDRESS]: 'Wallet Address',
+
+  [SPREADSHEET_COLUMNS.RECIPIENT]: 'Recipient',
+  [SPREADSHEET_COLUMNS.CURRENCY]: 'Currency',
   [SPREADSHEET_COLUMNS.AMOUNT]: 'Amount',
   [SPREADSHEET_COLUMNS.DUE_DATE]: 'Due Date',
+  [SPREADSHEET_COLUMNS.DETAILS]: 'Details',
 };
 
 export const CONTRACT_VIEWS = {
@@ -219,9 +267,11 @@ export const CONTRACT_VIEWS = {
 
 export const PAYMENT_VIEWS = {
   ALL: 'All',
+  DUE: 'Due',
   DUE_TODAY: 'Due Today',
   DUE_SOON: 'Due Soon',
   OVERDUE: 'Overdue',
+  IN_PROGRESS: 'In Progress',
 };
 
 export const PAYMENT_DUE_STATES = {
@@ -233,7 +283,9 @@ export const PAYMENT_DUE_STATES = {
 export const TRANSACTION_VIEWS = {
   ALL: 'All',
   RECEIVED: 'Received',
-  SENT: 'Sent'
+  SENT: 'Sent',
+  PROCESSING: 'Processing',
+  COMPLETED: 'Completed',
 };
 
 export const TRANSACTION_DIRECTIONS = {
@@ -350,17 +402,109 @@ export const NETWORKS = {
 };
 
 export const SMART_WALLET_NETWORKS = [
+  NETWORKS.RINKEBY,
   NETWORKS.HARMONY_TESTNET,
   NETWORKS.KOVAN,
   NETWORKS.ROPSTEN,
 ];
 
-export const WALLET_OPTIONS = {
-  SMART: 'smart',
+export const PAYMENT_OPTIONS = {
   DEFAULT: 'default',
+  SMART_WALLET: 'smart-wallet',
+  DELEGATED_TRANSFER: 'delegated-transfer',
+  ARAGON: 'aragon',
+  GNOSIS: 'gnosis',
+  // Legacy
+  SMART: 'smart', // smart wallet
+  DAO: 'dao', // delegated transfer
 };
 
-export const WALLET_OPTIONS_LABELS = {
-  [WALLET_OPTIONS.DEFAULT]: 'Metamask',
-  [WALLET_OPTIONS.SMART]: 'Smart Wallet',
+export const LEGACY_AND_DISABLED_PAYMENT_OPTIONS = [
+  // Disabled
+  PAYMENT_OPTIONS.SMART_WALLET,
+  // Legacy
+  PAYMENT_OPTIONS.SMART,
+  PAYMENT_OPTIONS.DAO
+];
+
+export const PAYMENT_OPTIONS_LABELS = {
+  [PAYMENT_OPTIONS.DEFAULT]: 'Metamask Wallet',
+  [PAYMENT_OPTIONS.SMART_WALLET]: 'Grindery Wallet',
+  [PAYMENT_OPTIONS.DELEGATED_TRANSFER]: 'Smart Contract Address',
+  [PAYMENT_OPTIONS.ARAGON]: 'Aragon DAO',
+  [PAYMENT_OPTIONS.GNOSIS]: 'Gnosis Safe',
+  // Legacy
+  [PAYMENT_OPTIONS.SMART]: 'Grindery Wallet',
+  [PAYMENT_OPTIONS.DAO]: 'Smart Contract Address',
 };
+
+export const PAYMENT_OPTIONS_DESCRIPTION = {
+  [PAYMENT_OPTIONS.DEFAULT]: 'Use your current balance of {balance}',
+  [PAYMENT_OPTIONS.SMART_WALLET]: 'Use your current balance of {balance} to pay',
+  [PAYMENT_OPTIONS.DELEGATED_TRANSFER]: 'Send {amount} from any Wallet or DAO to a unique smart contract address',
+  [PAYMENT_OPTIONS.ARAGON]: 'Fill in the DAO name or address to create a withdrawal transaction in the DAO',
+  [PAYMENT_OPTIONS.GNOSIS]: 'Fill in the Gnosis Safe address to create a withdrawal transaction in the safe',
+};
+
+export const EVENT_NAMES = {
+  BATCH_TRANSFER_REQUESTED: 'BatchTransferRequested',
+  BATCH_TRANSFER: 'BatchTransfer',
+  RECEIVED: 'Received',
+};
+
+export const EVENT_SIGNATURES = {
+  BATCH_TRANSFER_REQUESTED: Web3.utils.sha3('BatchTransferRequested(address,address[],uint256[],address[])'),
+  BATCH_TRANSFER: Web3.utils.sha3('BatchTransfer(address,address[],uint256[],address[])'),
+  RECEIVED: Web3.utils.sha3('Received(address,uint256)'),
+};
+
+export const ARAGON_APP_ENS_SUFFIX = '.aragonid.eth';
+export const ARAGON_PM_ENS_SUFFIX = '.aragonpm.eth';
+
+export const ARAGON_FUNCTION_SIGNATURES = {
+  NEW_IMMEDIATE_PAYMENT: 'newImmediatePayment(address,address,uint256,string)',
+  FORWARD: 'forward(bytes)',
+};
+
+export const ARAGON_EVENT_SIGNATURES = {
+  SET_APP: Web3.utils.sha3('SetApp(bytes32,bytes32,address)'),
+  NEW_APP_PROXY: Web3.utils.sha3('NewAppProxy(address,bool,bytes32)'),
+};
+
+export const ARAGON_APP_NAME = {
+  AGENT: 'agent',
+  FINANCE: 'finance',
+  FUNDRAISING: 'aragon-fundraising',
+  SURVEY: 'survey',
+  TOKEN_MANAGER: 'token-manager',
+  VAULT: 'vault',
+  VOTING: 'voting',
+};
+
+export const GNOSIS_OPERATIONS = {
+  CALL: 0,
+  DELEGATE: 1,
+  CREATE: 2,
+};
+
+export const HEX_PREFIX = '0x';
+
+export const EMPTY_HEX_DATA = HEX_PREFIX;
+
+export const MODELS = {
+  CONTACTS: 'contacts',
+  PAYMENT_REQUESTS: 'payment_requests',
+};
+
+export const META_TRIGGERS = {
+  ACTIVATED: 'activated',
+  UPDATED: 'updated',
+};
+
+export const META_EVENTS = {
+  QUERY: 'query',
+};
+
+export const IPFS_URL = 'https://ipfs.infura.io:5001/api/v0';
+
+export const GRINDERY_INDEX_URL = 'https://grindery-index.herokuapp.com/api/v0';

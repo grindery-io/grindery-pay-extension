@@ -1,12 +1,18 @@
 /*global chrome*/
 import React, {useContext, useEffect, useState} from 'react';
 import {makeStyles} from '@material-ui/core/styles';
-import {Button, CircularProgress, FormControlLabel, Grid, MenuItem, Switch, Select} from '@material-ui/core';
+import {Button, CircularProgress, FormControlLabel, FormHelperText, Grid, MenuItem, Switch, Select} from '@material-ui/core';
 import {Alert} from '@material-ui/lab';
 
 import AppContext from '../../AppContext';
 
-import {DIALOG_ACTIONS, FIAT_CURRENCIES, INTEGRATIONS, DEFAULT_STABLE_COINS} from '../../helpers/contants';
+import {
+  DIALOG_ACTIONS,
+  FIAT_CURRENCIES,
+  INTEGRATIONS,
+  DEFAULT_STABLE_COINS,
+  DISABLED_INTEGRATIONS, HIDDEN_INTEGRATIONS
+} from '../../helpers/contants';
 import {getIntegrationDetails} from '../../helpers/utils';
 import {ERROR_MESSAGES} from '../../helpers/errors';
 import {getAdvancedMode, saveAdvancedMode} from "../../helpers/storage";
@@ -33,7 +39,7 @@ const useStyles = makeStyles((theme) => ({
   group: {
     borderBottom: '1px solid rgba(0, 0, 0, 0.1)',
     paddingBottom: theme.spacing(3.125),
-    marginBottom: theme.spacing(2.5),
+    margin: theme.spacing(2.5, 0),
     '& > *': {
       margin: theme.spacing(1.5, 0),
     },
@@ -143,90 +149,6 @@ export default () => {
     <div className={classes.container}>
       <div className={classes.header}>General Settings</div>
 
-      <div className={classes.group}>
-        <FormControlLabel
-          control={
-            <Switch
-              name="advanced_mode"
-              color="secondary"
-              checked={advancedMode}
-              onChange={() => onUpdateAdvancedMode(!advancedMode)}
-            />
-          }
-          label="Advanced mode"
-          labelPlacement="start"
-          className={classes.toggleContainer}
-          classes={{
-            label: classes.settingsLabel,
-          }}
-        />
-
-        <Grid container
-              direction="row"
-              justify="space-between"
-              alignItems="center"
-              className={classes.settingsRow}>
-          <div className={classes.settingsLabel}>
-            Display currency
-          </div>
-
-          {advancedMode && (
-            <Select
-              labelId="fiat-currency"
-              id="fiat-currency"
-              value={fiatCurrency}
-              onChange={e => updateFiatCurrency(e.target.value)}
-              className={classes.settingsSelect}>
-              {Object.keys(FIAT_CURRENCIES).map(key => {
-                const code = FIAT_CURRENCIES[key];
-                return (
-                  <MenuItem value={code}>{code}</MenuItem>
-                );
-              })}
-            </Select>
-          ) || (
-            <div className={classes.settingsLabel}>
-              {fiatCurrency}
-            </div>
-          )}
-        </Grid>
-
-        <Grid container
-              direction="row"
-              justify="space-between"
-              alignItems="center"
-              className={classes.settingsRow}>
-          <div className={classes.settingsLabel}>
-            Default stable coin
-          </div>
-
-          {advancedMode && (
-            <Select
-              labelId="stable-coin"
-              id="stable-coin"
-              value={stableCoin && stableCoin.name && coinNameToKeyMap[stableCoin.name]}
-              onChange={e => {
-                const key = e.target.value;
-                if(key && DEFAULT_STABLE_COINS[key]) {
-                  updateStableCoin(DEFAULT_STABLE_COINS[key]);
-                }
-              }}
-              className={classes.settingsSelect}>
-              {Object.keys(DEFAULT_STABLE_COINS).map(key => {
-                const option = DEFAULT_STABLE_COINS[key];
-                return (
-                  <MenuItem value={key}>{option.name}</MenuItem>
-                );
-              })}
-            </Select>
-          ) || (
-            <div className={classes.settingsLabel}>
-              {stableCoin && stableCoin.name}
-            </div>
-          )}
-        </Grid>
-      </div>
-
       {loading && (
         <div className={classes.loading}>
           <CircularProgress size={30}/>
@@ -236,9 +158,14 @@ export default () => {
           <Alert severity="error">{error || ERROR_MESSAGES.READ_INTEGRATIONS_FAILED}</Alert>
         ) || (
           [INTEGRATIONS.GOOGLE_SHEETS, INTEGRATIONS.CIRCLE, INTEGRATIONS.GUSTO].map(name => {
+            if(HIDDEN_INTEGRATIONS.includes(name)) {
+              return null;
+            }
+
             const isConnected = (integrations || {})[name],
               integrationLogo = getIntegrationDetails(name, 'logo'),
-              isDisabled = name !== INTEGRATIONS.GOOGLE_SHEETS;
+              isDisabled = DISABLED_INTEGRATIONS.includes(name);
+
             return (
               <div key={name} className={classes.integration}>
                 <Grid container
@@ -274,6 +201,99 @@ export default () => {
           })
         )
       )}
+
+      <div className={classes.group}>
+        <FormControlLabel
+          control={
+            <Switch
+              name="advanced_mode"
+              color="secondary"
+              checked={advancedMode}
+              onChange={() => onUpdateAdvancedMode(!advancedMode)}
+            />
+          }
+          label="Developer mode"
+          labelPlacement="start"
+          className={classes.toggleContainer}
+          classes={{
+            label: classes.settingsLabel,
+          }}
+        />
+        <FormHelperText>
+          This will enable a series of features intended for development and debugging. use them carefully or better don’t use them at all.
+        </FormHelperText>
+
+        {advancedMode && (
+          <>
+            <Grid container
+                  direction="row"
+                  justify="space-between"
+                  alignItems="center"
+                  className={classes.settingsRow}>
+              <div className={classes.settingsLabel}>
+                Display currency
+              </div>
+
+              {advancedMode && (
+                <Select
+                  labelId="fiat-currency"
+                  id="fiat-currency"
+                  value={fiatCurrency}
+                  onChange={e => updateFiatCurrency(e.target.value)}
+                  className={classes.settingsSelect}>
+                  {Object.keys(FIAT_CURRENCIES).map(key => {
+                    const code = FIAT_CURRENCIES[key];
+                    return (
+                      <MenuItem value={code}>{code}</MenuItem>
+                    );
+                  })}
+                </Select>
+              ) || (
+                <div className={classes.settingsLabel}>
+                  {fiatCurrency}
+                </div>
+              )}
+            </Grid>
+
+            {/*
+            <Grid container
+                  direction="row"
+                  justify="space-between"
+                  alignItems="center"
+                  className={classes.settingsRow}>
+              <div className={classes.settingsLabel}>
+                Default stable coin
+              </div>
+
+              {advancedMode && (
+                <Select
+                  labelId="stable-coin"
+                  id="stable-coin"
+                  value={stableCoin && stableCoin.name && coinNameToKeyMap[stableCoin.name]}
+                  onChange={e => {
+                    const key = e.target.value;
+                    if(key && DEFAULT_STABLE_COINS[key]) {
+                      updateStableCoin(DEFAULT_STABLE_COINS[key]);
+                    }
+                  }}
+                  className={classes.settingsSelect}>
+                  {Object.keys(DEFAULT_STABLE_COINS).map(key => {
+                    const option = DEFAULT_STABLE_COINS[key];
+                    return (
+                      <MenuItem value={key}>{option.name}</MenuItem>
+                    );
+                  })}
+                </Select>
+              ) || (
+                <div className={classes.settingsLabel}>
+                  {stableCoin && stableCoin.name}
+                </div>
+              )}
+            </Grid>
+            */}
+          </>
+        ) || null}
+      </div>
 
       {manifest && manifest.version && (
         <div className={classes.about}>

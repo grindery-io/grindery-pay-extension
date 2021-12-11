@@ -10,6 +10,7 @@ import Wallet from '../screens/Wallet';
 import Fund from '../screens/Fund';
 import Withdraw from '../screens/Withdraw';
 import Settings from '../screens/Settings';
+import Inspector from '../screens/Inspector';
 
 import AppContext from '../../AppContext';
 
@@ -62,6 +63,11 @@ export default () => {
     case SCREENS.SETTINGS: {
       return (
         <Settings />
+      );
+    }
+    case SCREENS.INSPECTOR: {
+      return (
+        <Inspector />
       );
     }
     default: {

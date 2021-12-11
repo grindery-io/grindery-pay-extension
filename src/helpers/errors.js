@@ -7,8 +7,9 @@ export const ERROR_MESSAGES = {
   INVALID_WALLET_ADDRESS: 'Invalid wallet address.',
   INVALID_PAYMENT_DETAILS: 'Invalid payment details.',
   INVALID_AMOUNT: 'Amount must be greater than zero.',
-  SAVE_FAILED: 'Failed to save, please try again or contact support.',
+  INVALID_SMART_ADDRESS_OR_SAFE_HASH: 'Invalid batch payment address or safe transaction hash.',
   INVALID_INPUT: 'Invalid input.',
+  SAVE_FAILED: 'Failed to save, please try again or contact support.',
   READ_CONTACTS_FAILED: 'Failed to retrieve contacts.',
   READ_PAYMENTS_FAILED: 'Failed to retrieve payments.',
   READ_INTEGRATIONS_FAILED: 'Failed to retrieve integrations.',
@@ -27,6 +28,13 @@ export const ERROR_MESSAGES = {
   CREATE_WALLET_FAILED: 'Failed to create wallet',
   AMOUNT_MORE_THAN_BALANCE: 'Amount must be less than the available balance.',
   SMART_WALLET_PAYMENT_FAILED: 'Failed to make payment from smart wallet.',
+  ARAGON_ENS_FAILED: 'Failed to retrieve the DAO address.',
+  ARAGON_INITIALIZATION_FAILED: 'Failed initialize the DAO.',
+  ARAGON_PERMISSIONS_FAILED: 'Your current account ({address}) may not have the required permissions to execute actions in this DAO.',
+  ARAGON_WITHDRAWAL_FAILED: 'Failed to create Aragon withdrawal.',
+  GNOSIS_WITHDRAWAL_FAILED: 'Failed to create Gnosis Safe withdrawal.',
+  INSPECTOR_INSTRUCTIONS: 'Enter a batch payment address or a gnosis safe transaction hash to view batch payment details.',
+  INSPECTOR_NO_DETAILS: "Couldn't find payment details for this address.",
 };
 
 export class GrinderyError extends Error {
