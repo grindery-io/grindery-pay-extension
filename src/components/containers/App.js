@@ -34,12 +34,13 @@ import {
   getNetworks,
   clearSnapshot,
   getSnapshot,
-  setHidePrePaymentNotice,
-  getHidePrePaymentNotice,
   getHash,
   saveHash,
   saveAddresses,
-  saveNetwork, getWalletAddresses
+  saveNetwork,
+  getWalletAddresses,
+  savePaymentRequest,
+  savePaymentRequests
 } from '../../helpers/storage';
 import {
   contactComparator,
@@ -125,7 +126,6 @@ export default () => {
   // Session Initialization
   const [sessionInitialized, setSessionInitialized] = useState(false);
   const [isNewUser, setIsNewUser] = useState(null);
-  const [hidePaymentNotice, setHidePaymentNotice] = useState(false);
   const [accessToken, setAccessToken] = useState(null);
   const [chains, setChains] = useState(cachedChains || []);
 
@@ -220,13 +220,7 @@ export default () => {
       restoreSession();
     });
 
-    getHidePrePaymentNotice().then(res => {
-      setHidePaymentNotice(!!res);
-    }).catch(() => {});
-
     listenToMetaEvents();
-
-    /*
     let dataRefresher = setInterval(() => {
       syncDataAndRefresh().catch(() => {});
     }, 15*1000);
@@ -234,7 +228,6 @@ export default () => {
     return () => {
       clearInterval(dataRefresher);
     };
-    */
   }, []);
 
   // Initialize app state
@@ -363,12 +356,18 @@ export default () => {
 
   const syncDataAndRefresh = () => {
     const address = addresses && addresses[0] || '';
-    return makeBackgroundRequest(TASKS.SYNC_EXTERNAL_DATA, {address}).then(() => {
+    const refreshLocalSources = () => {
       return Promise.all([
         getContacts(),
         getPayments(),
         getTransactions(),
-      ])
+      ]);
+    };
+
+    return makeBackgroundRequest(TASKS.SYNC_EXTERNAL_DATA, {address}).then(() => {
+      return refreshLocalSources();
+    }).catch(() => {
+      return refreshLocalSources();
     });
   };
 
@@ -525,6 +524,8 @@ export default () => {
             // Navigate to inspector
             setMetaQuery(query);
             setScreen(SCREENS.INSPECTOR);
+            // close dialogs
+            setDialog(null);
           }
           break;
         }
@@ -633,20 +634,6 @@ export default () => {
     return new Decimal(amount || 0).times(rate || 0).toFixed(4);
   };
 
-  const convertToPayableCrypto = amount => {
-    return new Decimal(10).pow(decimals || 18).times(amount || 0).times(rate || 0).toFixed(0);
-  };
-
-  const convertPayableToDisplayValue = value => {
-    const networkId = networks && networks[0] || null,
-      network = getNetworkById(networkId);
-    if(value && network) {
-      const decimals = network && network.nativeCurrency && network.nativeCurrency.decimals || null;
-      return new Decimal(value || 0).dividedBy(new Decimal(10).pow(decimals || 18).toNumber()).toFixed(4);
-    }
-    return 0;
-  };
-
   const convertToFiat = value => {
     let decimalFiat = new Decimal(0);
     const decimalValue = new Decimal(value || 0),
@@ -655,6 +642,18 @@ export default () => {
       decimalFiat = decimalValue.dividedBy(decimalRate);
     }
     return decimalFiat.toFixed(2);
+  };
+
+  const convertFiatToPayableCrypto = amount => {
+    return new Decimal(10).pow(decimals || 18).times(amount || 0).times(rate || 0).toFixed(0);
+  };
+
+  const convertDisplayCryptoToPayableCrypto = value => {
+    return new Decimal(value || 0).times(new Decimal(10).pow(decimals || 18).toNumber()).toFixed(0);
+  };
+
+  const convertPayableCryptoToDisplayCrypto = value => {
+    return new Decimal(value || 0).dividedBy(new Decimal(10).pow(decimals || 18).toNumber()).toFixed(4);
   };
 
   const updateFiatCurrency = value => {
@@ -716,11 +715,10 @@ export default () => {
 
   const addPayment = (data) => {
     const newItems = deduplicatePayments([data, ...payments]);
-    return writeToStorage(STORAGE_KEYS.PAYMENTS, newItems).then(res => {
+
+    return savePaymentRequest(data).then(() => {
       setPayments(newItems);
-
       syncDataAndRefresh().catch(() => {});
-
       return null;
     }).catch(e => {
       throw new GrinderyError(e, ERROR_MESSAGES.SAVE_FAILED);
@@ -729,9 +727,13 @@ export default () => {
 
   const addPayments = data => {
     if (data && Array.isArray(data)) {
-      const newItems = deduplicatePayments([...(data || []), ...(payments || [])]);
-      writeToStorage(STORAGE_KEYS.PAYMENTS, newItems).then(res => {
+      const newItems = deduplicatePayments([
+        ...(data || []),
+        ...(payments || [])
+      ]);
+      return savePaymentRequests(data).then(() => {
         setPayments(newItems);
+        syncDataAndRefresh().catch(() => {});
         return null;
       }).catch(e => {
         throw new GrinderyError(e, ERROR_MESSAGES.SAVE_FAILED);
@@ -762,12 +764,28 @@ export default () => {
     });
   };
 
+  const parseCurrencyAccuratePayment = payment => {
+    if(payment && payment.inputCurrency && (payment.amount || payment.value)) {
+      const cleanedPayment = {...payment};
+      if(cleanedPayment.inputCurrency === FIAT_CURRENCIES.USD && cleanedPayment.amount) {
+        cleanedPayment.value = convertToCrypto(cleanedPayment.amount);
+      } else if(cleanedPayment.inputCurrency !== FIAT_CURRENCIES.USD && cleanedPayment.inputCurrency === currency && cleanedPayment.value) {
+        cleanedPayment.amount = convertToFiat(cleanedPayment.value);
+      } else if(cleanedPayment.amount) {
+        cleanedPayment.value = convertToCrypto(cleanedPayment.amount);
+      } else if(cleanedPayment.value && cleanedPayment.inputCurrency === currency) {
+        cleanedPayment.amount = convertToFiat(cleanedPayment.value);
+      }
+      return cleanedPayment;
+    }
+    return payment;
+  };
+
   return (
     <AppContext.Provider value={{
       ...defaultAppState,
       // Data
       isNewUser,
-      hidePaymentNotice,
       accessToken,
       screen,
       screenTab,
@@ -818,22 +836,22 @@ export default () => {
           setNotifications([{title, type},...(notifications || [])]);
         }
       },
-      updateHidePaymentNotice: () => {
-        setHidePaymentNotice(true);
-        setHidePrePaymentNotice().catch(() => {});
-      },
       setMetaQuery,
 
       // Wallet
       getWalletInfo,
       getSmartWalletInfo,
       getNetworkById,
-      convertToCrypto,
-      convertToPayableCrypto,
-      convertPayableToDisplayValue,
-      convertToFiat,
       updateFiatCurrency,
       updateStableCoin,
+
+      // Currency conversions
+      convertToCrypto,
+      convertToFiat,
+      convertFiatToPayableCrypto,
+      convertDisplayCryptoToPayableCrypto,
+      convertPayableCryptoToDisplayCrypto,
+
       // Contacts
       getContacts,
       addContact,
@@ -850,6 +868,7 @@ export default () => {
       removeIntegration,
 
       syncDataAndRefresh,
+      parseCurrencyAccuratePayment,
     }}>
       <div className={classes.container}>
         <ErrorBoundary>

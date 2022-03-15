@@ -408,6 +408,11 @@ export const SMART_WALLET_NETWORKS = [
   NETWORKS.ROPSTEN,
 ];
 
+export const SWITCHABLE_NETWORKS = [
+  NETWORKS.HARMONY,
+  ...SMART_WALLET_NETWORKS,
+];
+
 export const PAYMENT_OPTIONS = {
   DEFAULT: 'default',
   SMART_WALLET: 'smart-wallet',

@@ -15,7 +15,7 @@ import {
 } from '../../helpers/contants';
 import {getIntegrationDetails} from '../../helpers/utils';
 import {ERROR_MESSAGES} from '../../helpers/errors';
-import {getAdvancedMode, saveAdvancedMode} from "../../helpers/storage";
+import {getAdvancedMode, getEnableGWorkSync, saveAdvancedMode, saveEnableGWorkSync} from "../../helpers/storage";
 
 let manifest = null;
 try {
@@ -97,6 +97,7 @@ export default () => {
   const {fiatCurrency, stableCoin, updateFiatCurrency, updateStableCoin, integrations, openDialog, getIntegrations, removeIntegration} = useContext(AppContext);
 
   const [advancedMode, setAdvancedMode] = useState(false);
+  const [enableGWork, setEnableGWork] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [connecting, setConnecting] = useState({});
@@ -121,11 +122,20 @@ export default () => {
       setLoading(false);
       setError(ERROR_MESSAGES.READ_INTEGRATIONS_FAILED);
     });
+
+    getEnableGWorkSync().then(enabled => {
+      setEnableGWork(!!enabled);
+    });
   }, []);
 
   const onUpdateAdvancedMode = enabled => {
     setAdvancedMode(!!enabled);
     saveAdvancedMode(!!enabled).catch(() => {});
+  };
+
+  const onUpdateEnableGWork = enabled => {
+    setEnableGWork(!!enabled);
+    saveEnableGWorkSync(!!enabled).catch(() => {});
   };
 
   const onConnect = name => {
@@ -291,6 +301,23 @@ export default () => {
               )}
             </Grid>
             */}
+
+            <FormControlLabel
+              control={
+                <Switch
+                  name="advanced_mode"
+                  color="secondary"
+                  checked={enableGWork}
+                  onChange={() => onUpdateEnableGWork(!enableGWork)}
+                />
+              }
+              label="Enable Grindery Work payment requests"
+              labelPlacement="start"
+              className={classes.toggleContainer}
+              classes={{
+                label: classes.settingsLabel,
+              }}
+            />
           </>
         ) || null}
       </div>

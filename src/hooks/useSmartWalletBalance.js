@@ -11,7 +11,7 @@ import {getPriceData} from '../helpers/utils';
 export default (address, networkId, currency) => {
   const [balance, setBalance] = useState({});
 
-  const convertPayableToDisplayValue = (amount, decimals) => {
+  const convertPayableCryptoToDisplayCrypto = (amount, decimals) => {
     return new Decimal(amount || 0).dividedBy(new Decimal(10).pow(decimals || 18).toNumber()).toNumber();
   };
 
@@ -55,7 +55,7 @@ export default (address, networkId, currency) => {
 
     if(amount > 0) {
       const decimals = contracts && contracts.token && contracts.token[token] && contracts.token[token].decimals || 18;
-      cryptoAmount = convertPayableToDisplayValue(amount, decimals);
+      cryptoAmount = convertPayableCryptoToDisplayCrypto(amount, decimals);
 
       getPriceData(token, FIAT_CURRENCIES.USD).then(data => {
         const rate = new Decimal(data && data[token] || 0).toNumber() || 0;

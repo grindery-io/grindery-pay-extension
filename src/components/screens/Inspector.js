@@ -78,7 +78,7 @@ export default () => {
   const classes = useStyles();
   const cardClasses = cardStyles();
 
-  const {metaQuery, contacts, networks, currency, rate, setMetaQuery, convertPayableToDisplayValue, convertToFiat, syncDataAndRefresh} = useContext(AppContext);
+  const {metaQuery, contacts, addresses, networks, currency, rate, setMetaQuery, convertPayableCryptoToDisplayCrypto, convertToFiat, syncDataAndRefresh} = useContext(AppContext);
 
   const [search, setSearch] = useState('');
   const [error, setError] = useState(null);
@@ -87,7 +87,8 @@ export default () => {
 
   const web3 = useMemo(createWeb3, []);
 
-  const networkId = networks && networks[0] || null; // TODO: @david Remove this
+  const address = addresses && addresses[0] || null,
+    networkId = networks && networks[0] || null; // TODO: @david Remove this
 
   useEffect(() => {
     setLoading(true);
@@ -115,33 +116,17 @@ export default () => {
   }, [metaQuery]);
 
   useEffect(() => {
-    getMetaPaymentDetails(debouncedSearch);
-  }, [debouncedSearch]);
-
-  useEffect(() => {
-    if(details && Array.isArray(details.recipients) && details.recipients.length) {
-      const recipients = (details.recipients || []).map(recipient => ({
-        ...recipient,
-        amount: recipient.amount,
-        fiatAmount: convertToFiat(convertPayableToDisplayValue(recipient.amount)),
-        cryptoAmount: convertPayableToDisplayValue(recipient.amount),
-      }));
-      const total = getPaymentsTotal(recipients);
-      setDetails({
-        ...details,
-        recipients,
-        total: {
-          amount: total,
-          fiatAmount: convertToFiat(convertPayableToDisplayValue(total)),
-          cryptoAmount: convertPayableToDisplayValue(total),
-        }
-      });
+    if(currency && rate) {
+      getMetaPaymentDetails(debouncedSearch);
     }
-  }, [currency, rate]);
+  }, [debouncedSearch, currency, rate]);
 
-  const getContactName = address => {
-    const contact = (contacts || []).find(i => i.address === address);
-    return contact && contact.name || 'Unknown';
+  const getContactName = contactAddress => {
+    const contact = (contacts || []).find(i => i.address === contactAddress);
+    return (contact && contact.name) ||
+      (
+        address && contactAddress && Web3.utils.toChecksumAddress(contactAddress) === Web3.utils.toChecksumAddress(address) && 'You'
+      ) || 'Unknown';
   };
 
   const getMetaPaymentDetails = id => {
@@ -165,9 +150,10 @@ export default () => {
       if(res && res.recipients && res.recipients.length) {
         const recipients = (res.recipients || []).map(recipient => ({
           ...recipient,
+          name: (recipient && recipient.name) || (recipient.address && getContactName(recipient.address)) || '',
           amount: recipient.amount,
-          fiatAmount: convertToFiat(convertPayableToDisplayValue(recipient.amount)),
-          cryptoAmount: convertPayableToDisplayValue(recipient.amount),
+          fiatAmount: convertToFiat(convertPayableCryptoToDisplayCrypto(recipient.amount)),
+          cryptoAmount: convertPayableCryptoToDisplayCrypto(recipient.amount),
         }));
         const total = getPaymentsTotal(recipients);
 
@@ -175,11 +161,23 @@ export default () => {
         setError(null);
         setDetails({
           ...res,
+          ...(res.sender && res.sender.address?{
+            sender: {
+              ...res.sender,
+              name: (
+                res.sender && (
+                  res.sender.name || (
+                    res.sender.address && getContactName(res.sender.address)
+                  )
+                )
+              ) || '',
+            }
+          }:{}),
           recipients,
           total: {
             amount: total,
-            fiatAmount: convertToFiat(convertPayableToDisplayValue(total)),
-            cryptoAmount: convertPayableToDisplayValue(total),
+            fiatAmount: convertToFiat(convertPayableCryptoToDisplayCrypto(total)),
+            cryptoAmount: convertPayableCryptoToDisplayCrypto(total),
           }
         });
       } else {
@@ -212,8 +210,8 @@ export default () => {
             address,
             name: getContactName(address),
             amount,
-            fiatAmount: convertToFiat(convertPayableToDisplayValue(amount)),
-            cryptoAmount: convertPayableToDisplayValue(amount),
+            fiatAmount: convertToFiat(convertPayableCryptoToDisplayCrypto(amount)),
+            cryptoAmount: convertPayableCryptoToDisplayCrypto(amount),
           }
         });
 
@@ -229,8 +227,8 @@ export default () => {
           recipients,
           total: {
             amount: total,
-            fiatAmount: convertToFiat(convertPayableToDisplayValue(total)),
-            cryptoAmount: convertPayableToDisplayValue(total),
+            fiatAmount: convertToFiat(convertPayableCryptoToDisplayCrypto(total)),
+            cryptoAmount: convertPayableCryptoToDisplayCrypto(total),
           }
         });
       } else {
@@ -267,8 +265,8 @@ export default () => {
                     address,
                     name: getContactName(address),
                     amount,
-                    fiatAmount: convertToFiat(convertPayableToDisplayValue(amount)),
-                    cryptoAmount: convertPayableToDisplayValue(amount),
+                    fiatAmount: convertToFiat(convertPayableCryptoToDisplayCrypto(amount)),
+                    cryptoAmount: convertPayableCryptoToDisplayCrypto(amount),
                   });
                 }
               }
@@ -282,8 +280,8 @@ export default () => {
             address: to,
             name: getContactName(to),
             amount: value,
-            fiatAmount: convertToFiat(convertPayableToDisplayValue(value)),
-            cryptoAmount: convertPayableToDisplayValue(value),
+            fiatAmount: convertToFiat(convertPayableCryptoToDisplayCrypto(value)),
+            cryptoAmount: convertPayableCryptoToDisplayCrypto(value),
           });
         }
       }
@@ -303,18 +301,20 @@ export default () => {
           recipients,
           total: {
             amount: total,
-            fiatAmount: convertToFiat(convertPayableToDisplayValue(total)),
-            cryptoAmount: convertPayableToDisplayValue(total),
+            fiatAmount: convertToFiat(convertPayableCryptoToDisplayCrypto(total)),
+            cryptoAmount: convertPayableCryptoToDisplayCrypto(total),
           }
         });
       } else {
         setLoading(false);
         setError(ERROR_MESSAGES.INSPECTOR_NO_DETAILS);
+        setDetails(null);
       }
     }).catch(e => {
       console.error('safe transaction error: ', e);
       setLoading(false);
       setError(ERROR_MESSAGES.INSPECTOR_NO_DETAILS);
+      setDetails(null);
     });
   };
 

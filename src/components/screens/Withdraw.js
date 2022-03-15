@@ -251,7 +251,7 @@ export default () => {
                          className={classes.fiatAmount}
                          InputProps={{
                            inputProps: {
-                             pattern: '^\\d+(\\.\\d{1,2})?$',
+                             pattern: '^\\d+(\\.\\d+)?$',
                              size: (amountInput || '').toString().length + 2
                            }}
                          }/>
@@ -329,7 +329,7 @@ export default () => {
                                className={classes.fiatAmount}
                                InputProps={{
                                  inputProps: {
-                                   pattern: '^\\d+(\\.\\d{1,2})?$',
+                                   pattern: '^\\d+(\\.\\d+)?$',
                                    size: (tokenAmounts && tokenAmounts[token] || '').toString().length + 2
                                  }}
                                }/>

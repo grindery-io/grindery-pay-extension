@@ -256,6 +256,12 @@ export default ({transactions, search, error}) => {
                                     </>
                                   ) || ' '}
                                 </div>
+
+                                {payment.details && (
+                                  <div className={cardClasses.subheader}>
+                                    {payment.details}
+                                  </div>
+                                ) || null}
                               </Grid>
                             </div>
                             <div className={cardClasses.actions}>

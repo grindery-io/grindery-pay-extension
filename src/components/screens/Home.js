@@ -1,4 +1,4 @@
-import React, {useContext, useEffect} from 'react';
+import React, {useContext, useEffect, useState} from 'react';
 import {makeStyles} from '@material-ui/core/styles';
 import {Button, Card, CardContent, Grid, IconButton, Typography} from '@material-ui/core';
 import {Add as AddIcon, ArrowForward as ArrowForwardIcon} from '@material-ui/icons';
@@ -8,13 +8,19 @@ import AppContext from '../../AppContext';
 import useSmartWalletBalance from '../../hooks/useSmartWalletBalance';
 
 import {DIALOG_ACTIONS, FIAT_CURRENCIES, PAYMENT_VIEWS, SCREENS} from '../../helpers/contants';
-import {getPendingPayments, getPaymentsTotal, getInProgressPayments} from '../../helpers/utils';
+import {
+  filterPendingPayments,
+  getPaymentsTotal,
+  filterInProgressPayments,
+  filterExternalPaymentRequests
+} from '../../helpers/utils';
 
 import contactsIcon from '../../images/contacts.svg';
 import paymentsIcon from '../../images/payments-purple.svg';
 import walletIcon from '../../images/wallet-purple.svg';
 import fundIcon from '../../images/fund-purple.svg';
 import withdrawIcon from '../../images/withdraw-purple.svg';
+import {getEnableGWorkSync} from '../../helpers/storage';
 
 
 const useStyles = makeStyles((theme) => ({
@@ -112,21 +118,35 @@ const useStyles = makeStyles((theme) => ({
 
 export default () => {
   const classes = useStyles();
-  const {currency, walletAddresses, networks, contacts, payments, transactions, changeScreen,getSmartWalletInfo, convertToCrypto, convertPayableToDisplayValue, convertToFiat, updateFiatCurrency, getTransactions} = useContext(AppContext);
+  const {
+    currency, walletAddresses, networks, contacts, payments, transactions,
+    changeScreen, getSmartWalletInfo, syncDataAndRefresh
+  } = useContext(AppContext);
 
   const networkId = networks && networks[0] || null,
     walletAddress = networkId && walletAddresses && walletAddresses[networkId] || null;
 
-  const pendingPayments = getPendingPayments(payments, transactions),
-    pendingFiatTotal = getPaymentsTotal(pendingPayments);
+  const [enableGWork, setEnableGWork] = useState(false);
 
-  const inProgressPayments = getInProgressPayments(payments, transactions),
+  let pendingPayments = filterPendingPayments(payments, transactions);
+  if(!enableGWork) {
+    // Payments created in the extension don't have an origin set
+    pendingPayments = filterExternalPaymentRequests(pendingPayments);
+  }
+  const pendingFiatTotal = getPaymentsTotal(pendingPayments);
+
+  const inProgressPayments = filterInProgressPayments(payments, transactions),
     inProgressFiatTotal = getPaymentsTotal(inProgressPayments);
 
   const balance = useSmartWalletBalance(walletAddress, networkId, currency);
 
+
   useEffect(() => {
-    getTransactions().catch(() => {});
+    syncDataAndRefresh().catch(() => {});
+
+    getEnableGWorkSync().then(enabled => {
+      setEnableGWork(!!enabled);
+    }).catch(() => {});
   }, []);
 
   useEffect(() => {

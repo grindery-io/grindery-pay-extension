@@ -16,7 +16,14 @@ import SearchAndAdd from '../shared/SearchAndAdd';
 import AppContext from '../../AppContext';
 
 import {DIALOG_ACTIONS, SCREENS} from '../../helpers/contants';
-import {getContactPayments, getInitials, getPaymentsTotal, searchItems, truncateAddress} from '../../helpers/utils';
+import {
+  getContactPayments,
+  getCryptoPaymentsTotal,
+  getInitials,
+  getPaymentsTotal,
+  searchItems,
+  truncateAddress
+} from '../../helpers/utils';
 import {ERROR_MESSAGES} from '../../helpers/errors';
 import {cardStyles, COLORS} from '../../helpers/style';
 
@@ -70,7 +77,10 @@ const useStyles = makeStyles((theme) => ({
 export default () => {
   const classes = useStyles();
   const cardClasses = cardStyles();
-  const {currency, contacts, payments, changeScreen, openDialog, convertToCrypto, syncDataAndRefresh} = useContext(AppContext);
+  const {
+    currency, contacts, payments, changeScreen, openDialog,
+    syncDataAndRefresh, parseCurrencyAccuratePayment
+  } = useContext(AppContext);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -117,8 +127,11 @@ export default () => {
         <div>
           {contacts && contacts.length && (
             (contactResults || []).map(contact => {
-              const fiatTotal = getPaymentsTotal(getContactPayments(contact, payments)),
-                cryptoTotal = convertToCrypto(fiatTotal);
+              const accurateContactPayments = (getContactPayments(contact, payments) || []).map(
+                payment => parseCurrencyAccuratePayment(payment)
+              );
+              const fiatTotal = getPaymentsTotal(accurateContactPayments),
+                cryptoTotal = getCryptoPaymentsTotal(accurateContactPayments);
               return (
                 <Card className={cardClasses.container}>
                   <CardContent className={cardClasses.content}>

@@ -6,7 +6,7 @@ import Dialog, {useStyles as dialogStyles} from '../containers/Dialog';
 
 import AppContext from '../../AppContext';
 
-import {NETWORKS, TASKS, SMART_WALLET_NETWORKS} from '../../helpers/contants';
+import {TASKS, SWITCHABLE_NETWORKS} from '../../helpers/contants';
 import {makeBackgroundRequest} from '../../helpers/routines';
 
 import checkMarkIcon from '../../images/checkmark.svg';
@@ -73,7 +73,7 @@ export default ({nextDialog}) => {
             className={dialogClasses.dialogNarrow}
             onClose={onClose}
             closeOnOutsideClick={true}>
-      {SMART_WALLET_NETWORKS.map(network => {
+      {SWITCHABLE_NETWORKS.map(network => {
 
         return (
           <div className={clsx(classes.network, {[classes.networkSelected]: network.chainId === networkId})}

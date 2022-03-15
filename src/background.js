@@ -15,6 +15,7 @@ import {
 } from './helpers/contants';
 import {createProvider, createWeb3, getAccounts, getBalance, getNetwork, requestAccounts} from './helpers/metamask';
 import {
+  getEnableGWorkSync,
   getTransactions,
   saveAddresses,
   saveNetwork,
@@ -34,41 +35,39 @@ import {getNetworkExplorerUrl, getPaymentsTotal} from './helpers/utils';
 
 import contractsInfo from './helpers/contracts.json';
 import {syncPaymentRequests} from "./helpers/meta";
+import {getSafeTransactionByHash} from "./helpers/gnosis";
 
-const isPopUpOrTabOpen = () => {
-  const popupsAndTabs = [
-    ...(chrome.extension.getViews({ type: 'popup' }) || []),
-    ...(chrome.extension.getViews({ type: 'tab' }) || []),
-  ];
-  return popupsAndTabs && Array.isArray(popupsAndTabs) && popupsAndTabs.length;
+const isExtensionViewOpen = () => {
+  const views = chrome.extension.getViews({});
+  return views && Array.isArray(views) && views.length;
 };
 
 chrome.browserAction.onClicked.addListener((tab) => {
   if(tab && tab.id) {
     const url = tab.url;
+    const injectContentScript = () => {
+      chrome.tabs.executeScript(tab.id,{
+        file: 'content.js'
+      }, () => {
+      });
+    };
+
     if(
       /(\w+\.)?client\.aragon\.org$/i.test(url) || // Aragon
       /(\w+\.)?gnosis-safe\.io$/i.test(url) || // Gnosis Safe
       /(\w+\.)?multisig\.harmony\.one$/i.test(url) // Harmony MultiSig
     ) {
       sendMetaRequest(ACTIONS.TOGGLE_META_POPUP, tab.id).catch(e => {
-        console.error('tab:toggle meta popup: error:', e, tab.id);
+        // Inject content script if message fails
+        injectContentScript();
       });
     } else {
-      chrome.tabs.executeScript(tab.id,{
-        file: 'content.js'
-      }, () => {
-      });
+      injectContentScript();
     }
   }
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if(chrome.runtime.lastError) {
-    console.error('onMessage chrome.runtime.lastError => ', chrome.runtime.lastError.message || chrome.runtime.lastError);
-    return;
-  }
-
   const sendSuccessResponse = data => {
     sendResponse({
       data,
@@ -114,7 +113,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
               });
             }
           }
-          return false;
+          break;
         }
         case TASKS.GET_NETWORK: {
           getNetwork(web3)
@@ -132,8 +131,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
               .then(balance => sendSuccessResponse(balance))
               .catch(e => sendErrorResponse(e));
             return true;
+          } else {
+            sendErrorResponse(ERROR_MESSAGES.INVALID_WALLET_ADDRESS);
           }
-          sendErrorResponse(ERROR_MESSAGES.INVALID_WALLET_ADDRESS);
           break;
         }
         case TASKS.MAKE_PAYOUT: {
@@ -218,7 +218,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                   }).catch(() => {});
                   sendSuccessResponse(hash);
 
-                  if(!isPopUpOrTabOpen() && snapshot) {
+                  if(!isExtensionViewOpen() && snapshot) {
                     saveSnapshot({
                       ...snapshot,
                       state: {
@@ -267,7 +267,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                         inspector
                       }).catch(() => {});
 
-                      if(!isPopUpOrTabOpen() && snapshot) {
+                      if(!isExtensionViewOpen() && snapshot) {
                         saveSnapshot({
                           ...snapshot,
                           state: {
@@ -307,7 +307,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                       inspector
                     }).catch(() => {});
 
-                    if(!isPopUpOrTabOpen() && snapshot) {
+                    if(!isExtensionViewOpen() && snapshot) {
                       saveSnapshot({
                         ...snapshot,
                         state: {
@@ -354,7 +354,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                       inspector
                     }).catch(() => {});
 
-                    if(!isPopUpOrTabOpen()) {
+                    if(!isExtensionViewOpen()) {
                       if(snapshot) {
                         saveSnapshot({
                           ...snapshot,
@@ -403,7 +403,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 return true;
               } else {
                 sendErrorResponse(errorMessage);
-                return true;
               }
             }
           }
@@ -412,7 +411,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         case TASKS.SYNC_EXTERNAL_DATA: {
           const {address} = payload || {};
           if(address) {
-            syncPaymentRequests(address);
+            getEnableGWorkSync().then(enabled => {
+              if(enabled) {
+                syncPaymentRequests(address);
+              }
+            }).catch(() => {});
           }
           syncWithGoogleSheets().then(() => {
             sendSuccessResponse('synced');
@@ -431,6 +434,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
               i => typeof i.confirmed === 'boolean' && i.confirmed && i.delegated && !i.delegatedConfirmed && (i.delegatedAddress || i.smartAddress)
             );
             const delegatedAddresses = pendingDelegatedTransactions.map(i => i.delegatedAddress || i.smartAddress);
+
+            const pendingGnosisMultiSendTransactions = allTransactions.filter(
+              i => typeof i.confirmed === 'boolean' && i.confirmed && i.delegated &&
+                i.paymentMethod === PAYMENT_OPTIONS.GNOSIS && i.gnosisMultiSend && i.gnosisInitiated && !i.delegatedConfirmed
+            );
 
             let completedTransactions = [],
               completedTransactionsMeta = {};
@@ -461,6 +469,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                   completedTransactions.push(transaction.hash);
                   completedTransactionsMeta[transaction.hash] = {
                     delegatedHash: log.transactionHash,
+                  }
+                }
+              }
+
+              if(pendingGnosisMultiSendTransactions.length) {
+                for (const transaction of pendingGnosisMultiSendTransactions) {
+                  const networkId = await web3.eth.getChainId();
+                  const safeTx = await getSafeTransactionByHash(transaction.hash, networkId).catch(() => {});
+                  if(safeTx && safeTx.isExecuted && safeTx.isSuccessful) {
+                    completedTransactions.push(transaction.hash);
                   }
                 }
               }
@@ -589,7 +607,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                   receipt: res,
                 }).catch(() => {});
 
-                if(!isPopUpOrTabOpen()) {
+                if(!isExtensionViewOpen()) {
                   chrome.notifications.create('', {
                     title: 'Smart Wallet created',
                     message: 'Your smart wallet has been created',
@@ -647,7 +665,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             });
           }
           sendSuccessResponse('received!');
-          return;
+          break;
         }
         case TASKS.RELAY_META_EVENT: {
           const {query} = payload || {};
@@ -656,15 +674,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
               console.error('failed to relay meta event:', e, query);
             });
           }
-          sendSuccessResponse('received!');
-          return;
+          break;
         }
         default: {
           break;
         }
       }
     }
-    sendErrorResponse();
   }
 });
 
@@ -679,26 +695,30 @@ const getNetworkId = async () => {
   return web3 && web3.eth.getChainId();
 };
 
-chrome.tabs.onActivated.addListener(async (activeInfo) => {
+chrome.tabs.onActivated.addListener((activeInfo) => {
   const {tabId} = activeInfo || {};
   if(tabId) {
-    sendMetaRequest(ACTIONS.ADD_META, tabId, {
-      trigger: META_TRIGGERS.UPDATED,
-      networkId: await getNetworkId(),
-    }).catch(e => {
-      console.error('tab:onActivated: meta error:', e, tabId);
-    });
+    getNetworkId().then(networkId => {
+      sendMetaRequest(ACTIONS.ADD_META, tabId, {
+        trigger: META_TRIGGERS.UPDATED,
+        networkId,
+      }).catch(e => {
+        console.error('tab:onActivated: meta error:', e, tabId);
+      });
+    }).catch(e => {});
   }
 });
 
-chrome.tabs.onUpdated.addListener(async  (tabId, changeInfo, tab) => {
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if(tabId && changeInfo && changeInfo.status === 'complete') {
-    sendMetaRequest(ACTIONS.ADD_META, tabId, {
-      trigger: META_TRIGGERS.UPDATED,
-      networkId: await getNetworkId(),
-    }).catch(e => {
-      console.error('tab:onUpdated: meta error:', e, tabId);
-    });
+    getNetworkId().then(networkId => {
+      sendMetaRequest(ACTIONS.ADD_META, tabId, {
+        trigger: META_TRIGGERS.UPDATED,
+        networkId,
+      }).catch(e => {
+        console.error('tab:onUpdated: meta error:', e, tabId);
+      });
+    }).catch(e => {});
   }
 });
 

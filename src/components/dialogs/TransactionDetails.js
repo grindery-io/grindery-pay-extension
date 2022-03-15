@@ -81,10 +81,11 @@ const useStyles = makeStyles((theme) => ({
 export default ({payment, transaction, nextDialog, state}) => {
   const classes = useStyles();
 
-  let {currency, contacts, openDialog, closeDialog, convertToCrypto} = useContext(AppContext);
+  let {currency, contacts, openDialog, closeDialog, parseCurrencyAccuratePayment} = useContext(AppContext);
 
-  const fiatTotal = payment.amount,
-    cryptoTotal = convertToCrypto(payment.amount);
+  const accuratePayment = parseCurrencyAccuratePayment(payment),
+    fiatTotal = accuratePayment.amount,
+    cryptoTotal = accuratePayment.value;
 
   let transactorName = null,
     transactorAddress = null;

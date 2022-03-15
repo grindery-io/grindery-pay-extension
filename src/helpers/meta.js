@@ -2,7 +2,7 @@ import axios from 'axios';
 import {GRINDERY_INDEX_URL} from './contants';
 import {savePaymentRequests} from './storage';
 
-const parseMetaPaymentRequest = data => {
+const parseMetaPaymentRequest = (data, cid) => {
   if(data.recipient && data.recipient.address && data.currency && data.amount) {
     let payment = {
       address: data.recipient.address,
@@ -18,6 +18,10 @@ const parseMetaPaymentRequest = data => {
     if(data.recipient.name) {
       payment.name = data.recipient.name;
     }
+    payment.origin = data.meta.origin || '_unknown';
+    if(cid) {
+      payment.cid = cid;
+    }
     return payment;
   }
   return null;
@@ -30,7 +34,7 @@ export const getPaymentRequests = account => {
       let payments = [];
       for (const item of items) {
         const {cid, data} = item;
-        const payment = parseMetaPaymentRequest(data);
+        const payment = parseMetaPaymentRequest(data, cid);
         if(payment) {
           payments.push(payment);
         }

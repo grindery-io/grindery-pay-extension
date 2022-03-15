@@ -210,6 +210,12 @@ export default ({initialData, nextDialog}) => {
                 if(selectedSheet && selectedSheet.id) {
                   sheetId = selectedSheet.id;
                 }
+                if(selectedSheet && !/contact/i.test(selectedSheet.title || '')) {
+                  const contactsSheet = (res.sheets || []).find(i => /contact/i.test(i.title));
+                  if(contactsSheet && contactsSheet.id) {
+                    sheetId = contactsSheet.id;
+                  }
+                }
               }
               updateData(SHEET_KEYS.CONTACTS, sheetId);
             }).catch(() => {
@@ -279,8 +285,10 @@ export default ({initialData, nextDialog}) => {
 
     if(step !== STEPS.PAYMENT_REQUESTS) {
       const otherSheets = (sheets || []).filter(i => i.id !== data[SHEET_KEYS.CONTACTS]);
+      const paymentsSheet = (sheets || []).find(i => /payment/i.test(i.title));
+      let paymentsSheetId = (paymentsSheet && paymentsSheet.id) || (otherSheets && otherSheets[0] && otherSheets[0].id) || null;
       setStep(STEPS.PAYMENT_REQUESTS);
-      updateData(SHEET_KEYS.PAYMENT_REQUESTS, otherSheets && otherSheets[0] && otherSheets[0].id || null);
+      updateData(SHEET_KEYS.PAYMENT_REQUESTS, paymentsSheetId);
       return ;
     }
 

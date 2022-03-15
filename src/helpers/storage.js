@@ -20,6 +20,7 @@ export const STORAGE_KEYS = {
   FIAT_CURRENCY: 'fiat_currency',
   STABLE_COIN: 'stable_coin',
   ADVANCED_MODE: 'advanced_mode',
+  GRINDERY_WORK_SYNC: 'grindery_work_sync',
 };
 
 const canFallbackToStorage = typeof chrome.storage === 'undefined';
@@ -130,23 +131,6 @@ export const saveHash = data => {
   });
 };
 
-/* Hide Pre Payment Notice */
-export const getHidePrePaymentNotice = () => {
-  return readFromStorage(STORAGE_KEYS.HIDE_PRE_PAYMENT_NOTICE).then(res => {
-    return res === 'true';
-  }).catch(e => {
-    throw e;
-  });
-};
-
-export const setHidePrePaymentNotice = () => {
-  return writeToStorage(STORAGE_KEYS.HIDE_PRE_PAYMENT_NOTICE, 'true').then(res => {
-    return null;
-  }).catch(e => {
-    throw e;
-  });
-};
-
 /* Advanced Mode */
 export const getAdvancedMode = () => {
   return readFromStorage(STORAGE_KEYS.ADVANCED_MODE).then(res => {
@@ -158,6 +142,23 @@ export const getAdvancedMode = () => {
 
 export const saveAdvancedMode = (mode) => {
   return writeToStorage(STORAGE_KEYS.ADVANCED_MODE, mode?'true':'false').then(res => {
+    return null;
+  }).catch(e => {
+    throw e;
+  });
+};
+
+/* Advanced Mode */
+export const getEnableGWorkSync = () => {
+  return readFromStorage(STORAGE_KEYS.GRINDERY_WORK_SYNC).then(res => {
+    return res === 'true';
+  }).catch(e => {
+    throw e;
+  });
+};
+
+export const saveEnableGWorkSync = (mode) => {
+  return writeToStorage(STORAGE_KEYS.GRINDERY_WORK_SYNC, mode?'true':'false').then(res => {
     return null;
   }).catch(e => {
     throw e;
@@ -245,7 +246,7 @@ export const saveWalletAddress = (chainId, address) => {
 };
 
 
-/* Transactions */
+/* Payment Requests */
 export const getPaymentRequests = () => {
   return getArray(STORAGE_KEYS.PAYMENTS);
 };

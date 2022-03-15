@@ -34,10 +34,7 @@ export const sendExtensionMessage = data => {
   return new Promise((resolve, reject) => {
     try {
       chrome.runtime.sendMessage(data || {}, res => {
-        if(chrome.runtime.lastError) {
-          //console.error('sendExtensionMessage chrome.runtime.lastError => ', chrome.runtime.lastError.message || chrome.runtime.lastError);
-          reject(chrome.runtime.lastError.message || chrome.runtime.lastError);
-        } else if(res && res.data) {
+        if(res && res.data) {
           resolve(res && res.data || null);
         } else {
           //console.error('chrome sendMessage error => ', res && res.error);
@@ -123,10 +120,6 @@ export const sendMetaRequest = (action, tabId, payload=null) => {
 export const listenForExtensionNotification = (events, callback) => {
   //return; // TODO: @david Remove this
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    if(chrome.runtime.lastError) {
-      return;
-    }
-
     if(message && message.type === MESSAGE_TYPES.NOTIFICATION && (Array.isArray(events) && events.includes(message.event) || message.event === events)) {
       callback(message.event, message.payload);
       sendResponse({message: 'received'});
@@ -137,11 +130,6 @@ export const listenForExtensionNotification = (events, callback) => {
 export const listenForExtensionEvent = (events, callback) => {
   //return; // TODO: @david Remove this
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    if(chrome.runtime.lastError) {
-      //console.error('listenForExtensionEvent chrome.runtime.lastError => ', chrome.runtime.lastError.message || chrome.runtime.lastError);
-      return;
-    }
-
     if(message && message.type === MESSAGE_TYPES.EVENT && (Array.isArray(events) && events.includes(message.event) || message.event === events)) {
       callback(message.event, message.payload);
       sendResponse({message: 'received'});
@@ -317,8 +305,8 @@ export const mergeWithGoogleSheets = async () => {
           const paymentsRes = await readFromStorage(STORAGE_KEYS.PAYMENTS).catch(() => {});
           const localPayments = paymentsRes && Array.isArray(paymentsRes)?paymentsRes:[];
 
-          payments = [...localPayments];
-          const existingPaymentIds = payments.map(i => paymentIdentifier(i, true));
+          let newSheetPayments = [];
+          const existingPaymentIds = localPayments.map(i => paymentIdentifier(i, true));
           for (const item of sheetPayments.filter(i => !existingPaymentIds.includes(paymentIdentifier(i, true)))) {
             const payment = paymentParser(item);
             if(payment && payment.address && payment.currency && payment.amount) {
@@ -327,7 +315,7 @@ export const mergeWithGoogleSheets = async () => {
               if(!isUSD) {
                 fiatAmount = await convertCurrency(payment.amount, payment.currency, FIAT_CURRENCIES.USD, 2);
               }
-              payments.push({
+              newSheetPayments.push({
                 address: payment.address,
                 inputCurrency: payment.currency,
                 ...(isUSD?{
@@ -344,7 +332,7 @@ export const mergeWithGoogleSheets = async () => {
             }
           }
 
-          payments = deduplicatePayments(payments);
+          payments = deduplicatePayments([...newSheetPayments, ...localPayments]);
         }
 
         if((contacts && contacts.length) || (payments && payments.length)) {
@@ -370,7 +358,7 @@ export const mergeWithGoogleSheets = async () => {
                     return {
                       ...payment,
                       recipient: payment.address,
-                      due_date: moment.utc(payment.due_date).format('DD/MMM/YYYY'),
+                      due_date: payment.due_date?moment.utc(payment.due_date).format('DD/MMM/YYYY'):'',
                     };
                   })
                 )

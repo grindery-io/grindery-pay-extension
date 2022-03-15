@@ -2,7 +2,7 @@ import { SignTypedDataVersion } from '@metamask/eth-sig-util';
 import { TypedDataUtils } from 'eth-sig-util'; // Use because it supports v1
 import axios from 'axios';
 import Decimal from 'decimal.js';
-import {getMultiSendCallOnlyDeployment} from '@gnosis.pm/safe-deployments';
+import {getMultiSendDeployment} from '@gnosis.pm/safe-deployments';
 
 import gnosisJson from './gnosis.json';
 import {createWeb3} from './metamask';
@@ -10,7 +10,9 @@ import {generateTypedDataFrom, getEIP712Signer} from './EIP712Signer';
 import {ADDRESS_ZERO, EMPTY_HEX_DATA, GNOSIS_OPERATIONS, NETWORKS} from './contants';
 
 export const METAMASK_REJECT_CONFIRM_TX_ERROR_CODE = 4001;
-export const HARMONY_MULTI_SEND_ADDRESS = '0xDEff67e9A02b4Ce60ff62F3CB5FFB41d48856285';
+export const HARMONY_MULTI_SEND_ADDRESS = '0xDEff67e9A02b4Ce60ff62F3CB5FFB41d48856285'; // Reverts
+export const GRINDERY_HARMONY_MULTI_SEND_ADDRESS = '0x95e011B4C59B71f8F8B8FF94F96B2C2E0AB9BcA6';
+export const GRINDERY_HARMONY_TESTNET_MULTI_SEND_ADDRESS = '0x038B0C76B6dDebFbBdfa40Faa3EC81d446fF7308';
 
 export const isKeystoneError = (err) => {
   return err.message.startsWith('#ktek_error')
@@ -117,14 +119,19 @@ export const signOffChain = async (
   return signature;
 };
 
-export const getMultiSendContractAddress = (networkId) => {
+export const getMultiSendContractAddress = networkId => {
+  if(networkId === NETWORKS.HARMONY.chainId) {
+    return GRINDERY_HARMONY_MULTI_SEND_ADDRESS;
+  }
+  if(networkId === NETWORKS.HARMONY_TESTNET.chainId) {
+    return GRINDERY_HARMONY_TESTNET_MULTI_SEND_ADDRESS;
+  }
   const multiSendDeployment =
-    getMultiSendCallOnlyDeployment({
+    getMultiSendDeployment({
       network: networkId.toString(),
-    }) || getMultiSendCallOnlyDeployment();
+    }) || getMultiSendDeployment();
 
-  const isHarmony = [NETWORKS.HARMONY.chainId, NETWORKS.HARMONY_TESTNET.chainId].includes(networkId);
-  return isHarmony?HARMONY_MULTI_SEND_ADDRESS:multiSendDeployment?.networkAddresses[networkId] ?? multiSendDeployment?.defaultAddress;
+  return multiSendDeployment?.networkAddresses[networkId] ?? multiSendDeployment?.defaultAddress;
 };
 
 export const getMultiSendContract = (networkId, web3=null) => {
@@ -132,13 +139,14 @@ export const getMultiSendContract = (networkId, web3=null) => {
     web3 = createWeb3();
   }
 
-  const multiSendDeployment =
-    getMultiSendCallOnlyDeployment({
-      network: networkId.toString(),
-    }) || getMultiSendCallOnlyDeployment();
-
   const contractAddress = getMultiSendContractAddress(networkId);
-  return new web3.eth.Contract(multiSendDeployment?.abi, contractAddress);
+  const multiSendDeployment =
+    getMultiSendDeployment({
+      network: networkId.toString(),
+    }) || getMultiSendDeployment();
+
+  const multiSendDeploymentAbi = multiSendDeployment?.abi;
+  return new web3.eth.Contract(multiSendDeploymentAbi, contractAddress);
 };
 
 export const encodeMultiSendCall = (txs, networkId, web3=null) => {

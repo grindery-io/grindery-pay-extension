@@ -2,7 +2,7 @@
   "manifest_version": 2,
   "name": "Grindery Pay (Beta)",
   "description": "Decentralized Payouts",
-  "version": "0.3.21",
+  "version": "0.3.24",
   "author": "https://grindery.io",
   "icons": {
     "16": "logo.png",
@@ -58,7 +58,8 @@
   },
   "externally_connectable": {
     "matches": [
-      "https://metamask.io/*"
+      "https://grindery.io/*",
+      "https://*.grindery.io/*"
     ],
     "ids": [
       "*"

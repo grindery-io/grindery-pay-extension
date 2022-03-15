@@ -41,12 +41,15 @@ export default React.createContext({
   getWalletInfo: defaultFunction(),
   getSmartWalletInfo: defaultFunction(),
   getNetworkById: defaultFunction(),
-  convertToCrypto: defaultFunction(),
-  convertToPayableCrypto: defaultFunction(),
-  convertPayableToDisplayValue: defaultFunction(),
-  convertToFiat: defaultFunction(),
   updateFiatCurrency: defaultFunction(),
   updateStableCoin: defaultFunction(),
+
+  // Currency conversions
+  convertToCrypto: defaultFunction(),
+  convertToFiat: defaultFunction(),
+  convertFiatToPayableCrypto: defaultFunction(),
+  convertDisplayCryptoToPayableCrypto: defaultFunction(),
+  convertPayableCryptoToDisplayCrypto: defaultFunction(),
 
   // Contacts
   getContacts: defaultFunction(),
@@ -66,6 +69,7 @@ export default React.createContext({
   addIntegration: defaultFunction(),
   removeIntegration: defaultFunction(),
 
-  // syncDataAndRefresh
+  // Utils
   syncDataAndRefresh: defaultFunction(),
+  parseCurrencyAccuratePayment: defaultFunction(),
 });

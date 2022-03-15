@@ -145,7 +145,7 @@ export const handleSharedEvents = (message, sender, sendResponse) => {
       case ACTIONS.CLOSE: {
         closePopUp();
         sendSuccessResponse({message: 'closed'});
-        return ;
+        break;
       }
       case ACTIONS.GET_ACTIVE_GOOGLE_SHEET_INFO: {
         const data = getActiveGoogleSheetData();
@@ -154,7 +154,7 @@ export const handleSharedEvents = (message, sender, sendResponse) => {
         } else {
           sendErrorResponse('Failed to retrieve Google sheets data');
         }
-        return ;
+        break;
       }
       case ACTIONS.GET_ACTIVE_ARAGON_DAO_INFO: {
         if(isAragonTab()) {
@@ -170,7 +170,7 @@ export const handleSharedEvents = (message, sender, sendResponse) => {
         } else {
           sendErrorResponse('Not an aragon domain');
         }
-        return ;
+        break;
       }
       case ACTIONS.GET_ACTIVE_GNOSIS_SAFE_INFO: {
         if(isGnosisSafeTab()) {
@@ -185,13 +185,12 @@ export const handleSharedEvents = (message, sender, sendResponse) => {
         } else {
           sendErrorResponse('Not a gnosis safe');
         }
-        return ;
+        break;
       }
       default: {
         break;
       }
     }
-    // sendErrorResponse(); TODO: @david confirm if this is necessary
   }
 };
 

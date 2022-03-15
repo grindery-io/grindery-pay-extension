@@ -22,15 +22,19 @@ import AppContext from '../../AppContext';
 
 import {DIALOG_ACTIONS, PAYMENT_DUE_STATES, PAYMENT_VIEWS, SCREENS} from '../../helpers/contants';
 import {
-  getPendingPayments,
+  filterPendingPayments,
   getInitials,
   getPaymentContact,
-  getPaymentDueDisplay, getPaymentDueState, searchItems,
+  getPaymentDueDisplay,
+  getPaymentDueState,
+  searchItems,
   transactionFinder,
-  truncateAddress
+  truncateAddress,
+  filterExternalPaymentRequests
 } from '../../helpers/utils';
 import {ERROR_MESSAGES} from '../../helpers/errors';
 import {cardStyles} from '../../helpers/style';
+import {getEnableGWorkSync} from '../../helpers/storage';
 
 const useStyles = makeStyles((theme) => ({
   container: {
@@ -96,7 +100,10 @@ const useStyles = makeStyles((theme) => ({
 export default () => {
   const classes = useStyles();
   const cardClasses = cardStyles();
-  const {screenTab, currency, contacts, payments, transactions, changeScreen, openDialog, convertToCrypto, getPayments, getTransactions, syncDataAndRefresh} = useContext(AppContext);
+  const {
+    screenTab, currency, contacts, payments, transactions,
+    changeScreen, openDialog, syncDataAndRefresh, parseCurrencyAccuratePayment
+  } = useContext(AppContext);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -104,6 +111,7 @@ export default () => {
   const [currentFilter, setCurrentFilter] = useState(screenTab || null);
   const [search, setSearch] = useState('');
   const [select, setSelect] = useState(true);
+  const [enableGWork, setEnableGWork] = useState(false);
 
   useEffect(() => {
     // Load payments
@@ -117,6 +125,9 @@ export default () => {
       setError(ERROR_MESSAGES.READ_PAYMENTS_FAILED);
     });
 
+    getEnableGWorkSync().then(enabled => {
+      setEnableGWork(!!enabled);
+    }).catch(() => {});
   },[]);
 
   useEffect(() => {
@@ -136,7 +147,7 @@ export default () => {
       newSelectPayments.push({...payment, index: groupIdx});
     }
     // Filter out paid payments :-)
-    newSelectPayments = getPendingPayments(newSelectPayments, transactions);
+    newSelectPayments = filterPendingPayments(newSelectPayments, transactions);
     setSelectedPayments(newSelectPayments);
   };
 
@@ -170,15 +181,20 @@ export default () => {
   };
 
   useEffect(() => {
-    setSelectedPayments(getPendingPayments(selectedPayments, transactions));
+    setSelectedPayments(filterPendingPayments(selectedPayments, transactions));
   }, [transactions]);
 
-  const pendingPayments = (getPendingPayments(payments, transactions) || []).map(payment => {
+  let pendingPayments = (filterPendingPayments(payments, transactions) || []).map(payment => {
     return {
       ...payment,
       contact: getPaymentContact(payment, contacts),
     };
   });
+
+  if(!enableGWork) {
+    // Payments created in the extension don't have an origin set
+    pendingPayments = filterExternalPaymentRequests(pendingPayments);
+  }
 
   const FILTERS = [
     PAYMENT_VIEWS.ALL, PAYMENT_VIEWS.DUE,
@@ -255,7 +271,9 @@ export default () => {
                                 transaction = transactionFinder(transactions, payment) || null,
                                 isPaid = transaction && (typeof transaction.confirmed !== 'boolean' || transaction.confirmed),
                                 isProcessing = transaction && (typeof transaction.confirmed === 'boolean' && !transaction.confirmed);
+
                               const groupIdx = `${dueState}_${idx}`;
+                              const displayPayment = parseCurrencyAccuratePayment(payment);
 
                               return (
                                 <Card className={clsx(cardClasses.container, {'selected': selectedPayments.findIndex(i => i.index === groupIdx) > -1})}
@@ -273,7 +291,7 @@ export default () => {
                                         </div>
 
                                         <div className={clsx(cardClasses.header, cardClasses.bold)}>
-                                          ${payment.amount}
+                                          ${displayPayment.amount}
                                         </div>
                                       </Grid>
                                       <Grid container
@@ -288,11 +306,16 @@ export default () => {
                                         <div className={cardClasses.subheader} style={{whiteSpace: 'nowrap'}}>
                                           {currency && (
                                             <>
-                                              {convertToCrypto(payment.amount)}{' '}{currency}
+                                              {displayPayment.value}{' '}{currency}
                                             </>
                                           ) || ' '}
                                         </div>
                                       </Grid>
+                                      {payment.details && (
+                                        <div className={cardClasses.subheader}>
+                                          {payment.details}
+                                        </div>
+                                      ) || null}
                                     </div>
                                     <div className={cardClasses.actions}>
                                       <div className={clsx(cardClasses.status, {

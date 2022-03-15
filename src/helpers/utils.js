@@ -77,6 +77,18 @@ export const getPaymentsTotal = payments => {
   return total.toFixed(2);
 };
 
+export const getCryptoPaymentsTotal = payments => {
+  let total = new Decimal(0);
+  if(payments && Array.isArray(payments) && payments.length) {
+    for (const item of payments) {
+      if(item.value) {
+        total = total.add(item.value || 0);
+      }
+    }
+  }
+  return total.toFixed(4);
+};
+
 export const stripTimeFromDate = date => {
   return moment.utc(date || undefined).format('YYYY-MM-DD');
 };
@@ -116,6 +128,8 @@ export const getIntegrationDetails = (id, key) => {
   return INTEGRATION_DETAILS[id] && INTEGRATION_DETAILS[id][key] || null;
 };
 
+export const excludeEmptyObjects = items => (items || []).filter(i => i && Object.keys(i).length);
+
 export const deduplicateAddresses = addresses => {
   return _.uniq(
       (addresses && Array.isArray(addresses)?addresses:[])
@@ -127,7 +141,7 @@ export const deduplicateAddresses = addresses => {
 export const contactComparator = i => ['address', 'email'].map(key => i[key] || '').join('__');
 
 export const deduplicateContacts = contacts => {
-  return _.uniqBy(contacts && Array.isArray(contacts)?contacts:[], contactComparator);
+  return excludeEmptyObjects(_.uniqBy(contacts && Array.isArray(contacts)?contacts:[], contactComparator));
 };
 
 export const paymentParser = payment => {
@@ -145,6 +159,10 @@ export const paymentParser = payment => {
       cleanedPayment.fiatAmount = cleanedPayment.amount;
     }
     cleanedPayment.amount = cleanedPayment.value;
+  }
+
+  if(cleanedPayment.amount || typeof cleanedPayment.amount === 'number') {
+    cleanedPayment.amount = new Decimal(cleanedPayment.amount).toFixed(cleanedPayment.currency === FIAT_CURRENCIES.USD?2:4);
   }
   if(cleanedPayment.due_date) {
     const dateObject = moment.utc(cleanedPayment.due_date);
@@ -169,7 +187,30 @@ export const paymentComparator = (payment, ignoreTime=false) => {
 };
 
 export const deduplicatePayments = payments => {
-  return _.uniqBy(payments && Array.isArray(payments)?payments:[], paymentComparator);
+  return excludeEmptyObjects(_.uniqBy(payments && Array.isArray(payments)?payments:[], paymentComparator));
+};
+
+export const filterExternalPaymentRequests = payments => {
+  return (payments || []).filter(payment => payment.cid || !payment.origin);
+}
+
+export const filterPendingPayments = (payments, transactions) => {
+  return (payments || []).filter(payment => {
+    const transaction = transactionFinder(transactions, payment) || null;
+    return payment.amount && !transaction;
+  })
+};
+
+export const filterInProgressPayments = (payments, transactions) => {
+  return (payments || []).filter(payment => {
+    const transaction = transactionFinder(transactions, payment) || null;
+    const isPaid = transaction && (
+      typeof transaction.confirmed !== 'boolean' ||
+      (transaction.confirmed && !transaction.delegated) ||
+      (transaction.delegated && transaction.delegatedConfirmed)
+    );
+    return payment.amount && transaction && !isPaid;
+  })
 };
 
 export const deduplicateTransactions = transactions => {
@@ -191,25 +232,6 @@ export const transactionFinder = (transactions, payment) => {
     }
     return transactionComparators.includes(paymentComparator(payment));
   }) || null;
-};
-
-export const getPendingPayments = (payments, transactions) => {
-  return (payments || []).filter(payment => {
-    const transaction = transactionFinder(transactions, payment) || null;
-    return payment.amount && !transaction;
-  })
-};
-
-export const getInProgressPayments = (payments, transactions) => {
-  return (payments || []).filter(payment => {
-    const transaction = transactionFinder(transactions, payment) || null;
-    const isPaid = transaction && (
-        typeof transaction.confirmed !== 'boolean' ||
-        (transaction.confirmed && !transaction.delegated) ||
-        (transaction.delegated && transaction.delegatedConfirmed)
-    );
-    return payment.amount && transaction && !isPaid;
-  })
 };
 
 export const columnToLetter = (column) => {

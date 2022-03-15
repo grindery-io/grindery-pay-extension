@@ -301,7 +301,7 @@ export default ({initialData, contact, nextDialog}) => {
                        onChange={e => onFiatChange(e.target.value)}
                        InputProps={{
                          inputProps: {
-                           pattern: '^\\d+(\\.\\d{1,2})?$',
+                           pattern: '^\\d+(\\.\\d+)?$',
                          },
                          startAdornment: (
                            <InputAdornment position="start">$</InputAdornment>
@@ -318,7 +318,7 @@ export default ({initialData, contact, nextDialog}) => {
                          onChange={e => onCryptoChange(e.target.value)}
                          InputProps={{
                            inputProps: {
-                             pattern: '^\\d+(\\.\\d{1,4})?$',
+                             pattern: '^\\d+(\\.\\d+)?$',
                            },
                            endAdornment: (
                              <InputAdornment position="end">{currency}</InputAdornment>

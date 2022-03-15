@@ -44,7 +44,7 @@ import {
   ARAGON_APP_NAME,
   EMPTY_HEX_DATA, GNOSIS_OPERATIONS, IPFS_URL
 } from '../../helpers/contants';
-import {getPaymentContact, getPaymentsTotal, truncateAddress} from '../../helpers/utils';
+import {getCryptoPaymentsTotal, getPaymentContact, getPaymentsTotal, truncateAddress} from '../../helpers/utils';
 import {ERROR_MESSAGES} from '../../helpers/errors';
 import {listenForExtensionNotification, makeBackgroundRequest, sendContentRequest} from '../../helpers/routines';
 import {createWeb3} from '../../helpers/metamask';
@@ -195,7 +195,12 @@ export default ({payments, nextDialog, state, readonly, status}) => {
   const classes = useStyles();
   const dialogClasses = dialogStyles();
 
-  const {screen, dialog, addresses, networks, walletAddresses, currency, stableCoin, contacts, openDialog, closeDialog, addNotification, getNetworkById, convertToCrypto, convertToPayableCrypto, convertPayableToDisplayValue, convertToFiat, getTransactions, updateHidePaymentNotice} = useContext(AppContext);
+  const {
+    screen, dialog, addresses, networks, walletAddresses, currency, stableCoin, contacts,
+    openDialog, closeDialog, addNotification, getNetworkById,
+    convertToFiat, convertDisplayCryptoToPayableCrypto, convertPayableCryptoToDisplayCrypto,
+    getTransactions, parseCurrencyAccuratePayment
+  } = useContext(AppContext);
 
   const [processing, setProcessing] = useState(state && state.processing || false);
   const [sent, setSent] = useState(state && state.sent || false);
@@ -222,10 +227,11 @@ export default ({payments, nextDialog, state, readonly, status}) => {
   const address = addresses && addresses[0] || '', // TODO: @david Remove this || '0x7037f30B4F542ca66c06D377f79c6140947f49b1' || '0x5c1D926f62B61C9cf62167474111385ff7393c61'
     networkId = networks && networks[0] || null, // TODO: @david Remove this || 4 || 1666700000
     network = getNetworkById(networkId),
-    fiatTotal = getPaymentsTotal(payments),
-    cryptoTotal = convertToCrypto(fiatTotal),
-    numRecipients = (payments || []).length,
-    cryptoBalance = convertPayableToDisplayValue(balance || 0),
+    accuratePayments = (payments || []).map(payment => parseCurrencyAccuratePayment(payment)),
+    fiatTotal = getPaymentsTotal(accuratePayments),
+    cryptoTotal = getCryptoPaymentsTotal(accuratePayments),
+    numRecipients = (accuratePayments || []).length,
+    cryptoBalance = convertPayableCryptoToDisplayCrypto(balance || 0),
     fiatBalance = convertToFiat(cryptoBalance),
     smartWalletAddress = networkId && walletAddresses && walletAddresses[networkId] || null,
     ERROR_PAYMENT_FAILED = `Failed to pay ${numRecipients} recipient${numRecipients === 1 ? '' : 's'}`;
@@ -294,7 +300,7 @@ export default ({payments, nextDialog, state, readonly, status}) => {
 
               initiateAragonWithdraw(
                 payload.delegatedAddress,
-                convertToPayableCrypto(cryptoTotal),
+                convertDisplayCryptoToPayableCrypto(cryptoTotal),
                 getBatchSummary(payload.delegatedAddress) || '',
                 payload.aragon.apps,
                 address,
@@ -344,7 +350,7 @@ export default ({payments, nextDialog, state, readonly, status}) => {
 
               initiateGnosisWithdraw(
                 payload.delegatedAddress,
-                convertToPayableCrypto(cryptoTotal),
+                convertDisplayCryptoToPayableCrypto(cryptoTotal),
                 EMPTY_HEX_DATA,
                 GNOSIS_OPERATIONS.CALL,
                 payload.gnosis.safeAddress,
@@ -526,7 +532,7 @@ export default ({payments, nextDialog, state, readonly, status}) => {
       paymentError = null;
 
     if (address) {
-      if (payments.length > 0) {
+      if (accuratePayments.length > 0) {
         // Compose multiple payment payload
         let abi = null,
           contractAddress = null,
@@ -571,7 +577,7 @@ export default ({payments, nextDialog, state, readonly, status}) => {
             ) && isMultiTokenContract;
           }
 
-          let cryptoValueTotal = convertToPayableCrypto(fiatTotal),
+          let payableCryptoValueTotal = convertDisplayCryptoToPayableCrypto(cryptoTotal),
             recipients = [],
             rawValues = [],
             values = [],
@@ -584,14 +590,22 @@ export default ({payments, nextDialog, state, readonly, status}) => {
             return new Decimal(10).pow(stableCoinDecimals || 18).times(amount || 0).toFixed(0);
           };
 
-          for (const payment of (payments || [])) {
+          for (const payment of (accuratePayments || [])) {
             const to = payment && payment.address || null,
               fiatAmount = payment && payment.amount || null,
-              cryptoValue = fiatAmount && (isSmartWalletPayment?convertToPayableStableCoinValue(fiatAmount):convertToPayableCrypto(fiatAmount)) || null;
+              cryptoValue = payment && payment.value || null,
+              payableCryptoValue = (
+                isSmartWalletPayment?(
+                  // Smart Wallet uses stable dollar coins
+                  fiatAmount && convertToPayableStableCoinValue(fiatAmount)
+                ):(
+                  cryptoValue && convertDisplayCryptoToPayableCrypto(cryptoValue)
+                )
+              ) || null;
 
             recipients.push(to);
-            rawValues.push(cryptoValue);
-            values.push(Web3.utils.toHex(cryptoValue));
+            rawValues.push(payableCryptoValue);
+            values.push(Web3.utils.toHex(payableCryptoValue));
 
             const contact = payment.contact || getPaymentContact(payment, contacts);
 
@@ -600,13 +614,16 @@ export default ({payments, nextDialog, state, readonly, status}) => {
                 address: to,
                 name: contact && contact.name || payment.name,
               },
-              value: cryptoValue,
+              value: payableCryptoValue,
               paymentCurrency: currency,
               amount: payment.inputCurrency === FIAT_CURRENCIES.USD?payment.amount:payment.value,
               currency: payment.inputCurrency,
               note: payment.details,
               dueDate: payment.due_date,
               createdAt: payment.created_at,
+              ...(payment.cid?{
+                cid: payment.cid
+              }:{}),
             });
 
             if (isMultiTokenIndexBasedContract) {
@@ -618,7 +635,7 @@ export default ({payments, nextDialog, state, readonly, status}) => {
             if(isGnosisPayment) {
               multiSend.push({
                 to,
-                value: cryptoValue,
+                value: payableCryptoValue,
                 data: EMPTY_HEX_DATA, // TODO: @david Enable ERC20 transfers
               });
             }
@@ -660,7 +677,7 @@ export default ({payments, nextDialog, state, readonly, status}) => {
 
           paymentPayload = {
             from: address,
-            value: Web3.utils.toHex(cryptoValueTotal),
+            value: Web3.utils.toHex(payableCryptoValueTotal),
             ...(isDelegatedPayment?{}:{
               abi,
               contractAddress,
@@ -671,7 +688,7 @@ export default ({payments, nextDialog, state, readonly, status}) => {
               ...(isDelegatedPayment?{}:{
                 to: contractAddress,
               }),
-              value: cryptoValueTotal,
+              value: payableCryptoValueTotal,
               chain: networkId,
               currency,
               recipients,
@@ -796,10 +813,10 @@ export default ({payments, nextDialog, state, readonly, status}) => {
 
   const getRecipientsSummary = () => {
     let details = ['Recipients:'];
-    for (const [idx, payment] of (payments || []).entries()) {
+    for (const [idx, payment] of (accuratePayments || []).entries()) {
       const contact = payment.contact || getPaymentContact(payment, contacts);
       details.push(
-        `${idx+1}. ${payment.address}/ ${contact && contact.name || payment.name} - ${convertToCrypto(payment.amount)} ${currency || 'ETH'}/ $${payment.amount}`
+        `${idx+1}. ${payment.address}/ ${contact && contact.name || payment.name} - ${payment.value} ${currency || 'ETH'}/ $${payment.amount}`
       );
     }
     return details.join('\n');
@@ -1130,25 +1147,29 @@ export default ({payments, nextDialog, state, readonly, status}) => {
               <img src={CopyIcon} className={classes.copyIcon}/>
             </Copy>
           </Grid>
-          {(payments || []).map((payment, idx) => {
+          {(accuratePayments || []).map((payment, idx) => {
             const contact = payment.contact || getPaymentContact(payment, contacts);
             return (
-              <Grid container
-                    direction="row"
-                    justify="space-between"
-                    wrap="nowrap"
-                    className={clsx(classes.payoutDetails, classes.payoutDetailsSmall)}>
-                <div style={{textAlign: 'left'}}>
-                  <div>{contact && contact.name || payment.name}</div>
-                  <div>{truncateAddress(payment.address)}</div>
-                </div>
-                <div className={classes.bold} style={{textAlign: 'right'}}>
-                  <div>${payment.amount}</div>
-                  {(currency && (isNormalWalletPayment || isDelegatedPayment)) && (
-                    <div>{convertToCrypto(payment.amount)}{' '}{currency}</div>
-                  ) || null}
-                </div>
-              </Grid>
+              <div className={clsx(classes.payoutDetails, classes.payoutDetailsSmall)}>
+                <Grid container
+                      direction="row"
+                      justify="space-between"
+                      wrap="nowrap">
+                  <div style={{textAlign: 'left'}}>
+                    <div>{contact && contact.name || payment.name}</div>
+                    <div>{truncateAddress(payment.address)}</div>
+                  </div>
+                  <div className={classes.bold} style={{textAlign: 'right'}}>
+                    <div>${payment.amount}</div>
+                    {(currency && (isNormalWalletPayment || isDelegatedPayment)) && (
+                      <div>{payment.value}{' '}{currency}</div>
+                    ) || null}
+                  </div>
+                </Grid>
+                {payment.details && (
+                  <div style={{textAlign: 'left'}}>{payment.details}</div>
+                ) || null}
+              </div>
             );
           })}
         </div>
@@ -1186,7 +1207,7 @@ export default ({payments, nextDialog, state, readonly, status}) => {
           <div className={classes.bold} style={{textAlign: 'right'}}>
             <div>${paymentMethodFiatBalance}</div>
             {(currency && isNormalWalletPayment) && (
-              <div>{paymentMethodFiatBalance}{' '}{currency}</div>
+              <div>{paymentMethodCryptoBalance}{' '}{currency}</div>
             ) || null}
           </div>
         </Grid>
