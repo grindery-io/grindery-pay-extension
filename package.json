@@ -1,7 +1,16 @@
 {
   "name": "grindery-payroll",
   "version": "0.1.0",
-  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/grindery-io/grindery-pay-extension.git"
+  },
+  "author": "tdsemakula@gmail.com",
+  "license": "GPL-3.0",
+  "bugs": {
+    "url": "https://github.com/grindery-io/grindery-pay-extension/issues"
+  },
+  "homepage": "https://github.com/grindery-io/grindery-pay-extension#readme",
   "dependencies": {
     "@babel/core": "7.12.3",
     "@babel/plugin-proposal-optional-chaining": "^7.16.0",
